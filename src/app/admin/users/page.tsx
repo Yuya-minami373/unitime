@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { dbAll, dbRun } from "@/lib/db";
 import AppShell from "@/components/AppShell";
+import { ConfirmForm } from "./UserActionButtons";
 
 type User = {
   id: number;
@@ -24,7 +25,6 @@ async function createUser(formData: FormData) {
   const current = await getCurrentUser();
   if (!current || current.role !== "owner") redirect("/admin");
 
-
   const login_id = String(formData.get("login_id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim() || null;
@@ -38,34 +38,53 @@ async function createUser(formData: FormData) {
   if (!login_id || !name || !password) {
     redirect("/admin/users?error=required");
   }
+  if (password.length < 8) {
+    redirect("/admin/users?error=short_password");
+  }
+
+  // 重複 login_id の事前チェック（同姓同名の別人対応も考え、login_idのみ見る）
+  const existing = await dbAll<{ id: number; status: string }>(
+    `SELECT id, status FROM users WHERE login_id = ?`,
+    [login_id],
+  );
+  if (existing.length > 0) {
+    const status = existing[0].status;
+    const code = status === "retired" ? "duplicate_retired" : "duplicate_active";
+    redirect(`/admin/users?error=${code}&login_id=${encodeURIComponent(login_id)}`);
+  }
 
   const { hash } = hashPassword(password);
-  await dbRun(
-    `INSERT INTO users (login_id, password_hash, name, email, employment_type, role, salary_type, monthly_salary, hourly_rate, hire_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      login_id,
-      hash,
-      name,
-      email,
-      employment_type,
-      role,
-      salary_type,
-      salary_type === "monthly" ? salary : null,
-      salary_type === "hourly" ? salary : null,
-      hire_date,
-    ],
-  );
+  try {
+    await dbRun(
+      `INSERT INTO users (login_id, password_hash, name, email, employment_type, role, salary_type, monthly_salary, hourly_rate, hire_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        login_id,
+        hash,
+        name,
+        email,
+        employment_type,
+        role,
+        salary_type,
+        salary_type === "monthly" ? salary : null,
+        salary_type === "hourly" ? salary : null,
+        hire_date,
+      ],
+    );
+  } catch (err) {
+    console.error("[admin/users] createUser failed:", err);
+    const msg = err instanceof Error ? err.message : "unknown";
+    redirect(`/admin/users?error=db_error&detail=${encodeURIComponent(msg.slice(0, 200))}`);
+  }
 
   revalidatePath("/admin/users");
-  redirect("/admin/users");
+  redirect("/admin/users?success=created");
 }
 
 async function deactivateUser(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
   if (!current || current.role !== "owner") redirect("/admin");
-
 
   const userId = Number(formData.get("user_id"));
   if (userId === current.id) {
@@ -74,6 +93,18 @@ async function deactivateUser(formData: FormData) {
 
   await dbRun(`UPDATE users SET status = 'retired' WHERE id = ?`, [userId]);
   revalidatePath("/admin/users");
+  redirect("/admin/users?success=retired");
+}
+
+async function reactivateUser(formData: FormData) {
+  "use server";
+  const current = await getCurrentUser();
+  if (!current || current.role !== "owner") redirect("/admin");
+
+  const userId = Number(formData.get("user_id"));
+  await dbRun(`UPDATE users SET status = 'active' WHERE id = ?`, [userId]);
+  revalidatePath("/admin/users");
+  redirect("/admin/users?success=reactivated");
 }
 
 const EMPLOYMENT_LABEL: Record<string, string> = {
@@ -82,16 +113,25 @@ const EMPLOYMENT_LABEL: Record<string, string> = {
   crew: "クルー",
 };
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; success?: string; login_id?: string; detail?: string }>;
+}) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
   // ユーザー管理（給与情報含む）は owner のみ
   if (current.role !== "owner") redirect("/admin");
 
+  const { error, success, login_id: errLoginId, detail } = await searchParams;
+
   const users = await dbAll<User>(
     `SELECT id, login_id, name, email, employment_type, role, monthly_salary, hourly_rate, hire_date, status
      FROM users ORDER BY status = 'active' DESC, id`,
   );
+
+  const errorMessage = errorToMessage(error, errLoginId, detail);
+  const successMessage = successToMessage(success);
 
   return (
     <AppShell user={{ name: current.name, role: current.role, employment: current.employment_type }}>
@@ -109,6 +149,17 @@ export default async function UsersPage() {
           チームに戻る
         </Link>
       </div>
+
+      {successMessage && (
+        <div className="mb-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-800">
+          ✅ {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="mb-4 rounded-[8px] border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] text-rose-800">
+          ⚠️ {errorMessage}
+        </div>
+      )}
 
       {/* Users table */}
       <div className="u-card mb-8 overflow-hidden">
@@ -180,7 +231,10 @@ export default async function UsersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {u.status === "active" && u.id !== current.id && (
-                      <form action={deactivateUser}>
+                      <ConfirmForm
+                        action={deactivateUser}
+                        confirmMessage={`${u.name} さんを退職処理します。よろしいですか？\n\n（「復職」ボタンで元に戻せます）`}
+                      >
                         <input type="hidden" name="user_id" value={u.id} />
                         <button
                           type="submit"
@@ -188,7 +242,21 @@ export default async function UsersPage() {
                         >
                           退職処理
                         </button>
-                      </form>
+                      </ConfirmForm>
+                    )}
+                    {u.status === "retired" && (
+                      <ConfirmForm
+                        action={reactivateUser}
+                        confirmMessage={`${u.name} さんを在籍に戻します。よろしいですか？`}
+                      >
+                        <input type="hidden" name="user_id" value={u.id} />
+                        <button
+                          type="submit"
+                          className="text-[12px] font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--brand-primary)]"
+                        >
+                          復職
+                        </button>
+                      </ConfirmForm>
                     )}
                   </td>
                 </tr>
@@ -263,6 +331,44 @@ export default async function UsersPage() {
       </div>
     </AppShell>
   );
+}
+
+function errorToMessage(
+  code: string | undefined,
+  loginId: string | undefined,
+  detail: string | undefined,
+): string | null {
+  if (!code) return null;
+  switch (code) {
+    case "required":
+      return "ログインID・氏名・初期パスワードは必須項目です。";
+    case "short_password":
+      return "初期パスワードは8文字以上で設定してください。";
+    case "duplicate_active":
+      return `ログインID「${loginId}」は既に在籍中のユーザーで使われています。別のIDを指定してください。`;
+    case "duplicate_retired":
+      return `ログインID「${loginId}」は退職済みユーザーで使用されています。新規作成ではなく、テーブルの「復職」ボタンで戻せます。別人として登録する場合は別のログインIDを指定してください。`;
+    case "self":
+      return "自分自身を退職処理することはできません。";
+    case "db_error":
+      return `登録に失敗しました: ${detail ?? "DBエラー"}`;
+    default:
+      return `エラーが発生しました（${code}）`;
+  }
+}
+
+function successToMessage(code: string | undefined): string | null {
+  if (!code) return null;
+  switch (code) {
+    case "created":
+      return "ユーザーを登録しました。";
+    case "retired":
+      return "退職処理を完了しました。";
+    case "reactivated":
+      return "在籍ステータスに戻しました。";
+    default:
+      return null;
+  }
 }
 
 function Th({ children }: { children?: React.ReactNode }) {
