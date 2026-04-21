@@ -22,7 +22,7 @@ const users = [
     role: "owner",
     salary_type: null,
     monthly_salary: null,
-    hire_date: "2023-04-01",
+    hire_date: "2025-04-01",
   },
   {
     login_id: "watanabe",
@@ -32,7 +32,7 @@ const users = [
     role: "member",
     salary_type: "monthly",
     monthly_salary: 350000,
-    hire_date: "2025-10-01",
+    hire_date: "2025-06-01",
   },
 ];
 
