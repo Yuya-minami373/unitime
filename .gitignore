@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env
+.env.local
+*.db
+*.db-journal
+.DS_Store
+.vercel
+.aidesigner/*
+!.aidesigner/.gitkeep

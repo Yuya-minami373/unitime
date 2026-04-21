@@ -1,0 +1,33 @@
+{
+  "name": "unitime-demo",
+  "version": "1.0.0",
+  "description": "UniTime - UniPoll勤怠管理アプリ",
+  "scripts": {
+    "dev": "next dev -p 3005",
+    "build": "next build",
+    "start": "next start -p 3005",
+    "init-db": "node scripts/init-db.mjs",
+    "seed": "node scripts/seed.mjs",
+    "setup": "npm run init-db && npm run seed"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@libsql/client": "^0.17.2",
+    "@vercel/blob": "^2.3.3",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^1.8.0",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.3",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "postcss": "^8.5.10",
+    "puppeteer": "^24.42.0",
+    "tailwindcss": "^4.2.3",
+    "typescript": "^6.0.3"
+  }
+}

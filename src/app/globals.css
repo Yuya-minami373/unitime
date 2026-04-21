@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces (tinted blue palette) */
+  --bg-body: #f0f5ff;         /* subtle blue-tinted canvas */
+  --bg-surface: #ffffff;
+  --bg-subtle: #eff6ff;       /* very light blue for quiet zones */
+  --bg-subtle-alt: #f4f4f5;   /* neutral fallback */
+
+  /* Borders */
+  --border-light: #e2e8f0;
+  --border-dark: #cbd5e1;
+  --border-brand: #bfdbfe;
+
+  /* Text hierarchy */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-quaternary: #94a3b8;
+
+  /* Brand (UniPoll corporate blue — bidqual-aligned palette) */
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  --brand-400: #4d8af0;
+  --brand-500: #2563eb;
+  --brand-600: #1d4ed8;
+  --brand-700: #1e3a8a;
+
+  --brand-primary: #1e3a8a;
+  --brand-primary-hover: #1d4ed8;
+  --brand-accent: #2563eb;
+  --brand-accent-soft: #dbeafe;
+  --brand-accent-border: #bfdbfe;
+
+  /* Semantic accents */
+  --accent-emerald: #10b981;
+  --accent-emerald-soft: #d1fae5;
+  --accent-amber: #f59e0b;
+  --accent-amber-soft: #fef3c7;
+  --accent-rose: #e11d48;
+  --accent-rose-soft: #ffe4e6;
+
+  /* Legacy alias */
+  --accent-indigo: #2563eb;
+
+  /* Shadow */
+  --shadow-subtle: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-elevated: 0 4px 24px -4px rgba(15, 23, 42, 0.08);
+}
+
+@theme inline {
+  --color-surface: var(--bg-surface);
+  --color-subtle: var(--bg-subtle);
+  --color-border-light: var(--border-light);
+  --color-border-dark: var(--border-dark);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-quaternary: var(--text-quaternary);
+  --color-accent-indigo: var(--accent-indigo);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif;
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Micro label — uppercase tracked gray for tiny metric labels */
+.micro-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-dark); }
+
+/* Card — base surface */
+.u-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  box-shadow: var(--shadow-subtle);
+  transition: box-shadow 0.2s ease;
+}
+.u-card:hover { box-shadow: var(--shadow-elevated); }
+
+/* Sidebar gradient */
+.u-sidebar {
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 60%, #93c5fd 100%);
+}
+
+/* Hero gradient banner (deep navy → bright blue) */
+.u-hero {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%);
+  color: #ffffff;
+}
+.u-hero-subtle {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+}
+
+/* Button variants */
+.u-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  outline: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.u-btn:disabled { cursor: not-allowed; }
+
+.u-btn-primary {
+  background: var(--brand-primary);
+  color: var(--bg-surface);
+}
+.u-btn-primary:hover:not(:disabled) { background: var(--brand-primary-hover); }
+.u-btn-primary:focus-visible {
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.18);
+}
+
+.u-btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-subtle);
+}
+.u-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-body);
+  border-color: var(--border-dark);
+}
+.u-btn-secondary:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.u-btn-disabled {
+  background: var(--bg-subtle);
+  color: var(--text-quaternary);
+}
+
+/* Status pill */
+.u-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.u-pill-working {
+  color: var(--brand-accent);
+  background: var(--brand-accent-soft);
+  border-color: var(--brand-accent-border);
+}
+.u-pill-break {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border-color: var(--border-light);
+}
+.u-pill-off {
+  color: var(--text-tertiary);
+  background: var(--bg-subtle);
+  border-color: var(--border-light);
+}
+
+/* Dot indicators */
+.u-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.u-dot-indigo { background: var(--brand-accent); }
+.u-dot-brand { background: var(--brand-accent); }
+.u-dot-muted { background: var(--text-quaternary); }
+
+/* Input */
+.u-input {
+  width: 100%;
+  padding-block: 9px;
+  padding-inline: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.u-input:focus {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.u-input::placeholder { color: var(--text-quaternary); }
