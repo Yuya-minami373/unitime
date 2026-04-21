@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Receipt,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -261,7 +262,14 @@ function SidebarContent({
                 {empLabel}
               </span>
             </div>
-            <form action="/api/logout" method="POST" className="mt-2">
+            <Link
+              href="/profile"
+              className="mt-2 flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-[12px] font-medium text-[var(--brand-primary)]/70 transition-colors hover:bg-white/60 hover:text-[var(--brand-primary)]"
+            >
+              <KeyRound size={14} strokeWidth={1.75} />
+              プロフィール・パスワード
+            </Link>
+            <form action="/api/logout" method="POST">
               <button
                 type="submit"
                 className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-[12px] font-medium text-[var(--brand-primary)]/70 transition-colors hover:bg-white/60 hover:text-[var(--brand-primary)]"
