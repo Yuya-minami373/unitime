@@ -134,6 +134,9 @@ export default function PunchPanel({
   const status = getStatus(lastType);
 
   const clockInRecord = records.find((r) => r.punch_type === "clock_in");
+  const clockOutRecord = [...records]
+    .reverse()
+    .find((r) => r.punch_type === "clock_out");
   const elapsedMin = now && clockInRecord ? computeElapsedMinutes(records, now) : 0;
   const elapsedH = Math.floor(elapsedMin / 60);
   const elapsedM = elapsedMin % 60;
@@ -213,9 +216,11 @@ export default function PunchPanel({
     );
   })();
 
-  const startLabel = clockInRecord
-    ? `${formatTime(clockInRecord.punched_at)} START`
-    : null;
+  // 勤務中/休憩中のみ「09:19 START」のラベルを出す。退勤済時はサマリで出退勤時刻を出すので省略
+  const startLabel =
+    clockInRecord && status !== "done"
+      ? `${formatTime(clockInRecord.punched_at)} START`
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -253,40 +258,58 @@ export default function PunchPanel({
               </span>
             )}
           </div>
-          <div className="flex items-baseline gap-1">
-            {clockInRecord ? (
-              <>
-                <span
-                  className={`tabular-nums text-[42px] font-semibold leading-none tracking-tighter md:text-[52px] ${
-                    status === "working"
-                      ? "text-[var(--brand-primary)]"
-                      : "text-[var(--text-primary)]"
-                  }`}
-                >
-                  {elapsedH}
+          {status === "done" && clockInRecord && clockOutRecord ? (
+            // 退勤済: 出退勤時刻のサマリ表示
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline gap-2 text-[var(--text-primary)]">
+                <span className="tabular-nums text-[28px] font-semibold leading-none tracking-tight md:text-[34px]">
+                  {formatTime(clockInRecord.punched_at)}
                 </span>
-                <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
-                  h
+                <span className="text-[18px] text-[var(--text-quaternary)] md:text-[22px]">→</span>
+                <span className="tabular-nums text-[28px] font-semibold leading-none tracking-tight md:text-[34px]">
+                  {formatTime(clockOutRecord.punched_at)}
                 </span>
-                <span
-                  className={`ml-2 tabular-nums text-[52px] font-semibold leading-none tracking-tighter ${
-                    status === "working"
-                      ? "text-[var(--brand-primary)]"
-                      : "text-[var(--text-primary)]"
-                  }`}
-                >
-                  {String(elapsedM).padStart(2, "0")}
-                </span>
-                <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
-                  m
-                </span>
-              </>
-            ) : (
-              <span className="text-[22px] font-medium text-[var(--text-tertiary)]">
-                打刻をしてください
+              </div>
+              <span className="text-[12px] text-[var(--text-tertiary)]">
+                本日の勤務 {elapsedH}h {String(elapsedM).padStart(2, "0")}m ・お疲れ様でした
               </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-1">
+              {clockInRecord ? (
+                <>
+                  <span
+                    className={`tabular-nums text-[42px] font-semibold leading-none tracking-tighter md:text-[52px] ${
+                      status === "working"
+                        ? "text-[var(--brand-primary)]"
+                        : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {elapsedH}
+                  </span>
+                  <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
+                    h
+                  </span>
+                  <span
+                    className={`ml-2 tabular-nums text-[52px] font-semibold leading-none tracking-tighter ${
+                      status === "working"
+                        ? "text-[var(--brand-primary)]"
+                        : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {String(elapsedM).padStart(2, "0")}
+                  </span>
+                  <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
+                    m
+                  </span>
+                </>
+              ) : (
+                <span className="text-[22px] font-medium text-[var(--text-tertiary)]">
+                  打刻をしてください
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="relative flex w-full flex-col gap-2 md:w-auto md:items-end">
