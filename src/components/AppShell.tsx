@@ -347,11 +347,11 @@ export default function AppShell({
 
       {/* Mobile slide-over */}
       <aside
-        className={`fixed left-0 top-0 z-50 h-full w-[260px] transform border-r border-white/40 transition-transform md:hidden ${
+        className={`fixed left-0 top-0 z-50 flex h-[100dvh] w-[260px] transform flex-col border-r border-white/40 transition-transform md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-end p-3">
+        <div className="flex shrink-0 items-center justify-end p-3">
           <button
             onClick={() => setMobileOpen(false)}
             className="rounded-[6px] p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-body)]"
@@ -360,12 +360,14 @@ export default function AppShell({
             <X size={18} strokeWidth={1.75} />
           </button>
         </div>
-        <SidebarContent
-          user={user}
-          pathname={pathname}
-          collapsed={false}
-          onNavigate={() => setMobileOpen(false)}
-        />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <SidebarContent
+            user={user}
+            pathname={pathname}
+            collapsed={false}
+            onNavigate={() => setMobileOpen(false)}
+          />
+        </div>
       </aside>
 
       {/* Desktop sidebar */}
