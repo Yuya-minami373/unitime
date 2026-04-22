@@ -50,23 +50,37 @@ export default async function HomePage() {
   const month = jstNow.month;
   const ym = `${year}-${String(month).padStart(2, "0")}`;
 
-  // 本日の打刻
-  const records = await dbAll<PunchRecord>(
-    `SELECT punch_type, punched_at, latitude, longitude
-     FROM attendance_records
-     WHERE user_id = ? AND substr(punched_at, 1, 10) = ?
-     ORDER BY punched_at DESC`,
-    [user.id, today],
-  );
+  // 今週の日付範囲をまず決める
+  const weekDateArray = weekDates(now);
+  const weekStart = weekDateArray[0];
+  const weekEnd = weekDateArray[6];
 
-  // 今月の全打刻（月次KPI計算用）
-  const monthRecords = await dbAll<AttendanceRecord>(
-    `SELECT punch_type, punched_at
-     FROM attendance_records
-     WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
-     ORDER BY punched_at ASC`,
-    [user.id, ym],
-  );
+  // 本日・今月・今週の3クエリを並列実行（直列だと3xラウンドトリップ、並列だと1x）
+  const [records, monthRecords, weekRecords] = await Promise.all([
+    dbAll<PunchRecord>(
+      `SELECT punch_type, punched_at, latitude, longitude
+       FROM attendance_records
+       WHERE user_id = ? AND substr(punched_at, 1, 10) = ?
+       ORDER BY punched_at DESC`,
+      [user.id, today],
+    ),
+    dbAll<AttendanceRecord>(
+      `SELECT punch_type, punched_at
+       FROM attendance_records
+       WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
+       ORDER BY punched_at ASC`,
+      [user.id, ym],
+    ),
+    dbAll<AttendanceRecord>(
+      `SELECT punch_type, punched_at
+       FROM attendance_records
+       WHERE user_id = ?
+         AND substr(punched_at, 1, 10) BETWEEN ? AND ?
+       ORDER BY punched_at ASC`,
+      [user.id, weekStart, weekEnd],
+    ),
+  ]);
+
   const monthSummaries = summarizeMonth(year, month, monthRecords, user.standard_work_minutes);
   const monthTotal = calcMonthTotal(monthSummaries);
   const streak = calcStreak(monthSummaries, today);
@@ -87,18 +101,7 @@ export default async function HomePage() {
   const { avgClockIn, avgClockOut } = averageTimes(monthSummaries);
 
   // 今週の日別集計
-  const weekDateArray = weekDates(now);
   const weekRecordsByDate = new Map<string, AttendanceRecord[]>();
-  const weekStart = weekDateArray[0];
-  const weekEnd = weekDateArray[6];
-  const weekRecords = await dbAll<AttendanceRecord>(
-    `SELECT punch_type, punched_at
-     FROM attendance_records
-     WHERE user_id = ?
-       AND substr(punched_at, 1, 10) BETWEEN ? AND ?
-     ORDER BY punched_at ASC`,
-    [user.id, weekStart, weekEnd],
-  );
   for (const r of weekRecords) {
     const date = r.punched_at.slice(0, 10);
     if (!weekRecordsByDate.has(date)) weekRecordsByDate.set(date, []);

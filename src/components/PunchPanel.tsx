@@ -115,10 +115,15 @@ export default function PunchPanel({
   initialRecords: TodayRecord[];
 }) {
   const router = useRouter();
-  const [records] = useState<TodayRecord[]>(initialRecords);
+  const [records, setRecords] = useState<TodayRecord[]>(initialRecords);
   const [now, setNow] = useState<Date | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 親が再フェッチしたinitialRecordsを反映（楽観更新の裏でサーバの正本データで上書き）
+  useEffect(() => {
+    setRecords(initialRecords);
+  }, [initialRecords]);
 
   useEffect(() => {
     setNow(new Date());
@@ -144,6 +149,16 @@ export default function PunchPanel({
   async function handlePunch(punchType: string) {
     setLoading(punchType);
     setError(null);
+
+    // 楽観的UI更新: サーバ送信前にローカルrecordsへ即追加してUIを即時反映
+    const optimisticRecord: TodayRecord = {
+      punch_type: punchType,
+      punched_at: new Date().toISOString(),
+      latitude: null,
+      longitude: null,
+    };
+    const prevRecords = records;
+    setRecords([...records, optimisticRecord]);
 
     let coords: { latitude?: number; longitude?: number; accuracy?: number } = {};
     if ("geolocation" in navigator) {
@@ -172,12 +187,15 @@ export default function PunchPanel({
     });
 
     if (!res.ok) {
+      // 失敗したらロールバック
+      setRecords(prevRecords);
       const data = await res.json().catch(() => ({ error: "エラーが発生しました" }));
       setError(data.error ?? "エラーが発生しました");
       setLoading(null);
       return;
     }
     setLoading(null);
+    // 成功: サーバの正本データで上書き（タイムスタンプ等がサーバ基準に同期）
     router.refresh();
   }
 

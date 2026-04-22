@@ -72,48 +72,56 @@ export default async function AdminPage({
   const prevYm = `${prevDateUtc.getUTCFullYear()}-${String(prevDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
   const nextYm = `${nextDateUtc.getUTCFullYear()}-${String(nextDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
-  // owner（代表取締役など打刻対象外）はチームサマリから除外
-  const users = await dbAll<User>(
-    `SELECT id, name, login_id, employment_type, standard_work_minutes
-     FROM users
-     WHERE status = 'active' AND role != 'owner'
-     ORDER BY id`,
-  );
-
   const today = nowJST().slice(0, 10);
 
-  const userSummaries = await Promise.all(
-    users.map(async (u) => {
-      const records = await dbAll<AttendanceRecord>(
-        `SELECT punch_type, punched_at
-         FROM attendance_records
-         WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
-         ORDER BY punched_at ASC`,
-        [u.id, targetYm],
-      );
-      const summaries = summarizeMonth(
-        year,
-        month,
-        records,
-        u.standard_work_minutes ?? 435,
-      );
-      const total = calcMonthTotal(summaries);
+  // users / 全員分の月次打刻（1回で取得して後でuser_idでグループ化）/ 承認待ち精算 を並列取得
+  const [users, allMonthRecords, pendingExpenses] = await Promise.all([
+    dbAll<User>(
+      `SELECT id, name, login_id, employment_type, standard_work_minutes
+       FROM users
+       WHERE status = 'active' AND role != 'owner'
+       ORDER BY id`,
+    ),
+    dbAll<AttendanceRecord & { user_id: number }>(
+      `SELECT user_id, punch_type, punched_at
+       FROM attendance_records a
+       WHERE substr(punched_at, 1, 7) = ?
+         AND user_id IN (SELECT id FROM users WHERE status = 'active' AND role != 'owner')
+       ORDER BY punched_at ASC`,
+      [targetYm],
+    ),
+    listAllExpenses({ status: ["pending", "ai_flagged"] }),
+  ]);
 
-      // 今日の打刻から在勤ステータス
-      const todayRecords = records.filter(
-        (r) => r.punched_at.slice(0, 10) === today,
-      );
-      const status = currentWorkStatus(todayRecords);
+  // user_idごとにメモリ上でグループ化（N+1クエリを1クエリに圧縮）
+  const recordsByUser = new Map<number, AttendanceRecord[]>();
+  for (const r of allMonthRecords) {
+    if (!recordsByUser.has(r.user_id)) recordsByUser.set(r.user_id, []);
+    recordsByUser.get(r.user_id)!.push({
+      punch_type: r.punch_type,
+      punched_at: r.punched_at,
+    });
+  }
 
-      // 異常検知（当月分）
-      const anomalies = detectAnomalies(summaries, today);
+  const userSummaries = users.map((u) => {
+    const records = recordsByUser.get(u.id) ?? [];
+    const summaries = summarizeMonth(
+      year,
+      month,
+      records,
+      u.standard_work_minutes ?? 435,
+    );
+    const total = calcMonthTotal(summaries);
 
-      // 36協定アラートレベル
-      const level = overtimeLevel(total.totalOvertimeMinutes);
+    const todayRecords = records.filter(
+      (r) => r.punched_at.slice(0, 10) === today,
+    );
+    const status = currentWorkStatus(todayRecords);
+    const anomalies = detectAnomalies(summaries, today);
+    const level = overtimeLevel(total.totalOvertimeMinutes);
 
-      return { user: u, total, status, anomalies, level };
-    }),
-  );
+    return { user: u, total, status, anomalies, level };
+  });
 
   // 在勤状況カウント
   const statusCounts = userSummaries.reduce(
@@ -135,10 +143,6 @@ export default async function AdminPage({
     s.anomalies.map((a) => ({ ...a, userName: s.user.name })),
   );
 
-  // 立替精算の承認待ち（owner/admin共通）
-  const pendingExpenses = await listAllExpenses({
-    status: ["pending", "ai_flagged"],
-  });
   const pendingExpenseTotal = pendingExpenses.reduce((sum, c) => sum + c.amount, 0);
   const aiFlaggedCount = pendingExpenses.filter((c) => c.status === "ai_flagged").length;
 
