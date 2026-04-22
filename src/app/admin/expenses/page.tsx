@@ -124,9 +124,9 @@ function PendingCard({ claim, aiEnabled }: { claim: ExpenseClaim; aiEnabled: boo
   const showAiAlert = aiStatus === "warn" || aiStatus === "ng";
 
   return (
-    <div className="u-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex-1">
+    <div className="u-card p-4 md:p-5">
+      <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:flex-wrap md:gap-4">
+        <div className="w-full flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[15px] font-semibold text-[var(--text-primary)]">
               {claim.user_name}
@@ -211,8 +211,8 @@ function PendingCard({ claim, aiEnabled }: { claim: ExpenseClaim; aiEnabled: boo
           )}
         </div>
 
-        <div className="flex flex-col items-end gap-3">
-          <div className="text-[22px] font-semibold tabular-nums text-[var(--text-primary)]">
+        <div className="flex w-full items-center justify-between gap-3 md:w-auto md:flex-col md:items-end">
+          <div className="text-[20px] font-semibold tabular-nums text-[var(--text-primary)] md:text-[22px]">
             {formatYen(claim.amount)}
           </div>
           <ApprovalActions
@@ -232,7 +232,45 @@ function HistoryTable({ claims }: { claims: ExpenseClaim[] }) {
   }
   return (
     <div className="u-card overflow-hidden">
-      <div className="overflow-x-auto">
+      {/* Mobile cards */}
+      <ul className="divide-y divide-[var(--border-light)] md:hidden">
+        {claims.map((c) => (
+          <li key={c.id} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="tabular-nums text-[12px] text-[var(--text-tertiary)]">
+                    {c.claim_date}
+                  </span>
+                  <span className="text-[12px] font-medium text-[var(--text-secondary)]">
+                    {c.user_name}
+                  </span>
+                  <span className="rounded-[4px] bg-[var(--brand-50)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--brand-primary)]">
+                    {c.category}
+                  </span>
+                </div>
+                <div className="text-[13px] text-[var(--text-primary)] break-words">
+                  {c.purpose}
+                </div>
+                {c.approver_name && (
+                  <div className="text-[11px] text-[var(--text-tertiary)]">
+                    承認者: {c.approver_name}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="tabular-nums text-[14px] font-semibold text-[var(--text-primary)]">
+                  {formatYen(c.amount)}
+                </span>
+                <StatusChip status={c.status} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">

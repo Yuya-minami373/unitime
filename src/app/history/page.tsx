@@ -172,7 +172,7 @@ export default async function HistoryPage({
       </div>
 
       {/* KPI row 2: 社労士向け実績（深夜・土日・法定休日） */}
-      <div className="mb-5 grid grid-cols-3 gap-3 md:gap-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
         <StatTile
           label="深夜労働（22:00〜5:00）"
           value={formatHoursDecimal(total.totalNightMinutes)}
@@ -200,9 +200,106 @@ export default async function HistoryPage({
         休憩欄の「自動」バッジは労基34条に基づく自動控除（6h超→45分、8h超→60分）が適用された日を示します。
       </div>
 
-      {/* Daily table */}
+      {/* Daily list (mobile: cards / desktop: table) */}
       <div className="u-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile cards */}
+        <ul className="divide-y divide-[var(--border-light)] md:hidden">
+          {summaries.map((s) => {
+            const [, sm, sd] = s.date.split("-").map(Number);
+            const dow = dayOfWeekFromYmd(s.date);
+            const isWeekend = dow === 0 || dow === 6;
+            const isEmpty = s.workMinutes === 0;
+            const isToday = s.date === todayStr;
+            const isHolidayWork = s.holidayMinutes > 0;
+            const dowColor =
+              dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-[var(--text-tertiary)]";
+            return (
+              <li
+                key={s.date}
+                className={`px-4 py-3 ${
+                  isToday
+                    ? "bg-[var(--brand-accent-soft)]"
+                    : isWeekend && s.workMinutes > 0
+                    ? "bg-amber-50/40"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className={`tabular-nums text-[15px] font-semibold ${
+                        isToday
+                          ? "text-[var(--text-primary)]"
+                          : isEmpty
+                          ? "text-[var(--text-quaternary)]"
+                          : "text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {sm}/{sd}
+                    </span>
+                    <span className={`text-[12px] font-medium ${dowColor}`}>
+                      {DAY_JP[dow]}
+                    </span>
+                    {isToday && (
+                      <span className="rounded-[4px] bg-[var(--brand-primary)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white">
+                        今日
+                      </span>
+                    )}
+                  </div>
+                  <div className="tabular-nums text-[13px] text-[var(--text-secondary)]">
+                    {isEmpty ? (
+                      <span className="text-[var(--text-quaternary)]">—</span>
+                    ) : (
+                      <>
+                        <span>{formatTime(s.clockIn)}</span>
+                        <span className="mx-1 text-[var(--text-quaternary)]">→</span>
+                        <span>{formatTime(s.clockOut)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {!isEmpty && (
+                  <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
+                    <Metric label="実働" value={formatMinutes(s.workMinutes)} strong />
+                    <Metric
+                      label="休憩"
+                      value={s.breakMinutes > 0 ? formatMinutes(s.breakMinutes) : "—"}
+                      badge={s.autoBreakApplied ? "自動" : undefined}
+                    />
+                    <Metric
+                      label="所定外"
+                      value={s.scheduledOvertimeMinutes > 0 ? formatMinutes(s.scheduledOvertimeMinutes) : "—"}
+                      muted={!s.scheduledOvertimeMinutes}
+                    />
+                    <Metric
+                      label="法定外"
+                      value={s.overtimeMinutes > 0 ? formatMinutes(s.overtimeMinutes) : "—"}
+                      muted={!s.overtimeMinutes}
+                      indigo={s.overtimeMinutes > 0}
+                    />
+                  </div>
+                )}
+                {(s.nightMinutes > 0 || isHolidayWork) && (
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                    {s.nightMinutes > 0 && (
+                      <span className="rounded-[4px] bg-indigo-50 px-1.5 py-0.5 font-medium text-[var(--accent-indigo)]">
+                        深夜 {formatMinutes(s.nightMinutes)}
+                      </span>
+                    )}
+                    {isHolidayWork && (
+                      <span className="rounded-[4px] bg-rose-50 px-1.5 py-0.5 font-medium text-rose-700">
+                        法定休日 {formatMinutes(s.holidayMinutes)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">
@@ -314,6 +411,44 @@ export default async function HistoryPage({
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  strong,
+  muted,
+  indigo,
+  badge,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  muted?: boolean;
+  indigo?: boolean;
+  badge?: string;
+}) {
+  const valueColor = indigo
+    ? "text-[var(--accent-indigo)]"
+    : muted
+    ? "text-[var(--text-quaternary)]"
+    : "text-[var(--text-primary)]";
+  const weight = strong ? "font-semibold" : "font-medium";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+        {label}
+      </span>
+      <span className={`tabular-nums text-[13px] ${weight} ${valueColor}`}>
+        {value}
+        {badge && (
+          <span className="ml-1 rounded-[3px] bg-[var(--bg-subtle)] px-1 py-px text-[8px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] align-middle">
+            {badge}
+          </span>
+        )}
+      </span>
+    </div>
   );
 }
 

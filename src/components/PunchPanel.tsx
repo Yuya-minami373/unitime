@@ -220,7 +220,7 @@ export default function PunchPanel({
   return (
     <div className="flex flex-col gap-6">
       {/* Hero Punch Panel */}
-      <section className="relative flex flex-col gap-5 overflow-hidden rounded-[8px] border border-[var(--border-light)] bg-white p-6 shadow-[var(--shadow-subtle)] md:flex-row md:items-center md:justify-between">
+      <section className="relative flex flex-col gap-4 overflow-hidden rounded-[8px] border border-[var(--border-light)] bg-white p-4 shadow-[var(--shadow-subtle)] md:flex-row md:items-center md:justify-between md:gap-5 md:p-6">
         {/* 左端アクセントバー */}
         <div
           aria-hidden
@@ -257,7 +257,7 @@ export default function PunchPanel({
             {clockInRecord ? (
               <>
                 <span
-                  className={`tabular-nums text-[52px] font-semibold leading-none tracking-tighter ${
+                  className={`tabular-nums text-[42px] font-semibold leading-none tracking-tighter md:text-[52px] ${
                     status === "working"
                       ? "text-[var(--brand-primary)]"
                       : "text-[var(--text-primary)]"
@@ -265,7 +265,7 @@ export default function PunchPanel({
                 >
                   {elapsedH}
                 </span>
-                <span className="text-[22px] font-medium text-[var(--text-tertiary)]">
+                <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
                   h
                 </span>
                 <span
@@ -277,7 +277,7 @@ export default function PunchPanel({
                 >
                   {String(elapsedM).padStart(2, "0")}
                 </span>
-                <span className="text-[22px] font-medium text-[var(--text-tertiary)]">
+                <span className="text-[18px] font-medium text-[var(--text-tertiary)] md:text-[22px]">
                   m
                 </span>
               </>
@@ -289,9 +289,9 @@ export default function PunchPanel({
           </div>
         </div>
 
-        <div className="relative flex flex-col items-end gap-2">
+        <div className="relative flex w-full flex-col gap-2 md:w-auto md:items-end">
           {/* メインアクション: 出勤・退勤 */}
-          <div className="flex flex-wrap gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <button
               disabled={!canClockIn || loading !== null}
               onClick={() => handlePunch("clock_in")}

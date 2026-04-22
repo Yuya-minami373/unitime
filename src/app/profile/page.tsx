@@ -27,7 +27,7 @@ export default async function ProfilePage({
       <div className="max-w-[560px] space-y-6">
         <section className="rounded-[10px] border border-[var(--border-default)] bg-white p-5 shadow-[var(--shadow-subtle)]">
           <h2 className="mb-3 text-[14px] font-semibold">アカウント情報</h2>
-          <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-[13px]">
+          <dl className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-2 text-[13px] md:grid-cols-[120px_1fr]">
             <dt className="text-[var(--text-tertiary)]">氏名</dt>
             <dd className="font-medium">{user.name}</dd>
             <dt className="text-[var(--text-tertiary)]">ログインID</dt>

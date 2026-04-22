@@ -173,18 +173,21 @@ export default async function AdminPage({
       {pendingExpenses.length > 0 && (
         <Link
           href="/admin/expenses"
-          className="mb-5 flex items-center justify-between gap-4 rounded-[10px] border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3.5 transition-shadow hover:shadow-[var(--shadow-elevated)]"
+          className="mb-5 flex items-center justify-between gap-2 rounded-[10px] border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 transition-shadow hover:shadow-[var(--shadow-elevated)] md:gap-4 md:px-5 md:py-3.5"
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
               <Receipt size={16} strokeWidth={1.75} />
             </div>
-            <div>
-              <div className="text-[13px] font-semibold text-amber-900">
-                立替精算 承認待ち {pendingExpenses.length} 件（合計 {formatYen(pendingExpenseTotal)}）
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 text-[13px] font-semibold text-amber-900">
+                <span>立替精算 承認待ち {pendingExpenses.length} 件</span>
+                <span className="text-[12px] font-medium text-amber-800/80">
+                  合計 {formatYen(pendingExpenseTotal)}
+                </span>
                 {aiFlaggedCount > 0 && (
-                  <span className="ml-2 rounded-[4px] bg-orange-100 px-1.5 py-0.5 text-[11px] text-orange-800">
-                    うちAI要確認 {aiFlaggedCount} 件
+                  <span className="rounded-[4px] bg-orange-100 px-1.5 py-0.5 text-[11px] text-orange-800">
+                    AI要確認 {aiFlaggedCount}
                   </span>
                 )}
               </div>
@@ -193,7 +196,7 @@ export default async function AdminPage({
               </div>
             </div>
           </div>
-          <ArrowRight size={16} strokeWidth={1.75} className="text-amber-700 shrink-0" />
+          <ArrowRight size={16} strokeWidth={1.75} className="shrink-0 text-amber-700" />
         </Link>
       )}
 
@@ -388,9 +391,80 @@ export default async function AdminPage({
         </section>
       </div>
 
-      {/* Members table */}
+      {/* Members list (mobile: cards / desktop: table) */}
       <div className="u-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile cards */}
+        <ul className="divide-y divide-[var(--border-light)] md:hidden">
+          {userSummaries.map(({ user: u, total, status }) => (
+            <li key={u.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+                      {u.name}
+                    </span>
+                    <span className="rounded-[4px] border border-[var(--border-light)] bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+                      {EMPLOYMENT_LABEL[u.employment_type] ?? u.employment_type}
+                    </span>
+                  </div>
+                  <StatusPill status={status} />
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
+                  <Link
+                    href={`/history?ym=${targetYm}&user_id=${u.id}`}
+                    className="font-medium text-[var(--brand-accent)] hover:underline"
+                  >
+                    勤怠履歴
+                  </Link>
+                  <a
+                    href={`/api/export?ym=${targetYm}&user_id=${u.id}`}
+                    className="inline-flex items-center gap-1 font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  >
+                    <Download size={12} strokeWidth={1.75} />
+                    Excel
+                  </a>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+                    稼働
+                  </span>
+                  <span className="tabular-nums text-[13px] font-medium">
+                    {total.workDays}日
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+                    実働
+                  </span>
+                  <span className="tabular-nums text-[13px] font-medium">
+                    {formatHoursDecimal(total.totalWorkMinutes)}h
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+                    残業
+                  </span>
+                  <span
+                    className={`tabular-nums text-[13px] ${
+                      total.totalOvertimeMinutes > 0
+                        ? "font-medium text-[var(--accent-indigo)]"
+                        : "text-[var(--text-quaternary)]"
+                    }`}
+                  >
+                    {total.totalOvertimeMinutes > 0
+                      ? `${formatHoursDecimal(total.totalOvertimeMinutes)}h`
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">

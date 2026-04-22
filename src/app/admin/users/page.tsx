@@ -161,9 +161,91 @@ export default async function UsersPage({
         </div>
       )}
 
-      {/* Users table */}
+      {/* Users list (mobile: cards / desktop: table) */}
       <div className="u-card mb-8 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile cards */}
+        <ul className="divide-y divide-[var(--border-light)] md:hidden">
+          {users.map((u) => (
+            <li
+              key={u.id}
+              className={`px-4 py-3 ${u.status === "retired" ? "opacity-50" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+                      {u.name}
+                    </span>
+                    <span className="rounded-[4px] border border-[var(--border-light)] bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+                      {EMPLOYMENT_LABEL[u.employment_type] ?? u.employment_type}
+                    </span>
+                    {u.role === "owner" ? (
+                      <span className="rounded-[4px] border border-[var(--brand-primary)] bg-[var(--brand-primary)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
+                        代表
+                      </span>
+                    ) : u.role === "admin" ? (
+                      <span className="rounded-[4px] border border-[var(--brand-accent-border)] bg-[var(--brand-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--brand-accent)]">
+                        管理者
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-tertiary)] tabular-nums">
+                    ID: {u.login_id}
+                    {u.hire_date && <span className="ml-2">入社 {u.hire_date}</span>}
+                  </div>
+                  <div className="text-[11px] tabular-nums text-[var(--text-secondary)]">
+                    {u.monthly_salary
+                      ? `月${(u.monthly_salary / 10000).toFixed(0)}万`
+                      : u.hourly_rate
+                      ? `時給¥${u.hourly_rate}`
+                      : "給与未設定"}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  {u.status === "active" ? (
+                    <span className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+                      <span className="u-dot u-dot-indigo" />
+                      在籍
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[var(--text-quaternary)]">退職</span>
+                  )}
+                  {u.status === "active" && u.id !== current.id && (
+                    <ConfirmForm
+                      action={deactivateUser}
+                      confirmMessage={`${u.name} さんを退職処理します。よろしいですか？\n\n（「復職」ボタンで元に戻せます）`}
+                    >
+                      <input type="hidden" name="user_id" value={u.id} />
+                      <button
+                        type="submit"
+                        className="text-[11px] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
+                      >
+                        退職処理
+                      </button>
+                    </ConfirmForm>
+                  )}
+                  {u.status === "retired" && (
+                    <ConfirmForm
+                      action={reactivateUser}
+                      confirmMessage={`${u.name} さんを在籍に戻します。よろしいですか？`}
+                    >
+                      <input type="hidden" name="user_id" value={u.id} />
+                      <button
+                        type="submit"
+                        className="text-[11px] font-medium text-[var(--brand-accent)] transition-colors hover:text-[var(--brand-primary)]"
+                      >
+                        復職
+                      </button>
+                    </ConfirmForm>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">

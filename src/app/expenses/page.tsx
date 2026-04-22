@@ -81,7 +81,42 @@ export default async function ExpensesPage({
         </div>
       ) : (
         <div className="u-card overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <ul className="divide-y divide-[var(--border-light)] md:hidden">
+            {claims.map((c) => (
+              <li key={c.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="tabular-nums text-[12px] text-[var(--text-tertiary)]">
+                        {c.claim_date}
+                      </span>
+                      <span className="rounded-[4px] bg-[var(--brand-50)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-primary)]">
+                        {c.category}
+                      </span>
+                    </div>
+                    <div className="text-[13px] text-[var(--text-primary)] break-words">
+                      {c.purpose}
+                    </div>
+                    {c.category === "交通費" && (c.route_from || c.route_to) && (
+                      <div className="text-[11px] text-[var(--text-quaternary)] break-words">
+                        {c.route_from} → {c.route_to}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="tabular-nums text-[14px] font-semibold text-[var(--text-primary)]">
+                      {formatYen(c.amount)}
+                    </span>
+                    <StatusChip status={c.status} />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">
