@@ -1,5 +1,7 @@
 // 打刻データから日別/月次集計を計算するユーティリティ
 
+import { jstComponents, dayOfWeekFromYmd } from "./time";
+
 export type AttendanceRecord = {
   punch_type: string;
   punched_at: string;
@@ -46,9 +48,10 @@ function overlapWithNight(startMin: number, endMin: number): number {
   return total;
 }
 
+// JST壁時計の0:00起点minutesに変換（Vercel=UTCでも正しいJST分を返す）
 function toMinutes(iso: string): number {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  const c = jstComponents(iso);
+  return c.hour * 60 + c.minute + c.second / 60;
 }
 
 function minuteDiff(start: string, end: string): number {
@@ -118,8 +121,8 @@ export function summarizeDay(
     }
   }
 
-  // 曜日判定（土日）
-  const dow = new Date(date).getDay();
+  // 曜日判定（土日）※ dateは"YYYY-MM-DD"のJSTローカル日付
+  const dow = dayOfWeekFromYmd(date);
   const isWeekend = dow === 0 || dow === 6;
 
   // 法定休日労働（MVPでは日曜のみ法定休日と扱う。社労士計算への参考値）
@@ -148,9 +151,11 @@ export function summarizeMonth(
   records: AttendanceRecord[],
   standardWorkMinutes: number = 435,
 ): DaySummary[] {
-  const daysInMonth = new Date(year, month, 0).getDate();
+  // Date.UTCベースで月末日を算出（TZ非依存）
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const byDate = new Map<string, AttendanceRecord[]>();
 
+  // punched_at は "YYYY-MM-DDTHH:MM:SS.sss+09:00" 形式なので slice(0,10) はJST日付
   for (const r of records) {
     const date = r.punched_at.slice(0, 10);
     if (!byDate.has(date)) byDate.set(date, []);
@@ -224,27 +229,29 @@ export function formatHoursDecimal(minutes: number): string {
   return (minutes / 60).toFixed(1);
 }
 
-// 今週の月曜日（JST）をYYYY-MM-DDで返す
+// 今週の月曜日（JST）をYYYY-MM-DDで返す。TZ非依存
 export function startOfWeek(date: Date = new Date()): string {
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon
+  const c = jstComponents(date);
+  // Date.UTC で JST壁時計の年月日を構築 → getUTCDay で曜日取得
+  const base = new Date(Date.UTC(c.year, c.month - 1, c.day));
+  const day = base.getUTCDay(); // 0=Sun, 1=Mon
   const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const monday = new Date(Date.UTC(c.year, c.month - 1, c.day + diff));
+  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
 }
 
 // 週曜日ラベル
 export const WEEK_DAYS = ["月", "火", "水", "木", "金", "土", "日"];
 
-// 今週7日の日付配列
+// 今週7日の日付配列。TZ非依存
 export function weekDates(date: Date = new Date()): string[] {
   const start = startOfWeek(date);
   const [y, m, d] = start.split("-").map(Number);
   const result: string[] = [];
   for (let i = 0; i < 7; i++) {
-    const dt = new Date(y, m - 1, d + i);
+    const dt = new Date(Date.UTC(y!, m! - 1, d! + i));
     result.push(
-      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`,
+      `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`,
     );
   }
   return result;
@@ -266,12 +273,12 @@ export function currentWorkStatus(records: AttendanceRecord[]): WorkStatus {
   return "off";
 }
 
-// 所定労働日数: 月曜〜金曜（祝日未考慮、MVP版）
+// 所定労働日数: 月曜〜金曜（祝日未考慮、MVP版）。TZ非依存
 export function countWorkdays(year: number, month: number): number {
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   let count = 0;
   for (let day = 1; day <= daysInMonth; day++) {
-    const dow = new Date(year, month - 1, day).getDay();
+    const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
     if (dow !== 0 && dow !== 6) count++;
   }
   return count;
@@ -351,26 +358,26 @@ export function overtimeLevel(overtimeMinutes: number): OvertimeLevel {
   return "safe";
 }
 
-// 連続出勤日数: 今日から遡って連続して勤務記録のある日数
+// 連続出勤日数: 今日から遡って連続して勤務記録のある日数。TZ非依存（UTC基準で日付進行）
 export function calcStreak(summaries: DaySummary[], today: string): number {
   const byDate = new Map(summaries.map((s) => [s.date, s]));
   let streak = 0;
-  let cursor = new Date(today);
+  const [ty, tm, td] = today.split("-").map(Number);
+  let cursor = new Date(Date.UTC(ty!, tm! - 1, td!));
 
   while (true) {
-    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-${String(cursor.getUTCDate()).padStart(2, "0")}`;
     const s = byDate.get(key);
     if (!s || s.workMinutes === 0) {
-      // 休日（土日）はスキップしてストリーク継続
-      const dayOfWeek = cursor.getDay();
+      const dayOfWeek = cursor.getUTCDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) {
-        cursor.setDate(cursor.getDate() - 1);
+        cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
         continue;
       }
       break;
     }
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
     if (streak > 365) break;
   }
 

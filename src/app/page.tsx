@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { dbAll } from "@/lib/db";
-import { nowJST } from "@/lib/time";
+import { nowJST, jstComponents } from "@/lib/time";
 import AppShell from "@/components/AppShell";
 import PunchPanel from "@/components/PunchPanel";
 import LiveClock from "@/components/LiveClock";
@@ -45,8 +45,9 @@ export default async function HomePage() {
 
   const today = nowJST().slice(0, 10);
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const jstNow = jstComponents(now);
+  const year = jstNow.year;
+  const month = jstNow.month;
   const ym = `${year}-${String(month).padStart(2, "0")}`;
 
   // 本日の打刻
@@ -113,12 +114,12 @@ export default async function HomePage() {
     8 * 60,
   );
 
-  // 挨拶
-  const hour = now.getHours();
+  // 挨拶（JST壁時計ベース）
+  const hour = jstNow.hour;
   const greeting =
     hour < 11 ? "おはようございます" : hour < 17 ? "こんにちは" : "お疲れ様です";
   const displayName = user.name.split(/\s+/)[0] ?? user.name;
-  const dateLabel = `${year}年${month}月${now.getDate()}日（${DAY_JP[now.getDay()]}）`;
+  const dateLabel = `${year}年${month}月${jstNow.day}日（${DAY_JP[jstNow.dayOfWeek]}）`;
 
   return (
     <AppShell user={{ name: user.name, role: user.role, employment: user.employment_type }}>

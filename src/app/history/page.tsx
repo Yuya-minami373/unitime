@@ -12,11 +12,11 @@ import {
   formatHoursDecimal,
   type AttendanceRecord,
 } from "@/lib/attendance";
+import { jstComponents, formatTime as formatJSTTime, dayOfWeekFromYmd } from "@/lib/time";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatJSTTime(iso);
 }
 
 const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
@@ -30,9 +30,9 @@ export default async function HistoryPage({
   if (!currentUser) redirect("/login");
 
   const params = await searchParams;
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const targetYm = params.ym ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const nowJst = jstComponents();
+  const todayStr = `${nowJst.year}-${String(nowJst.month).padStart(2, "0")}-${String(nowJst.day).padStart(2, "0")}`;
+  const targetYm = params.ym ?? `${nowJst.year}-${String(nowJst.month).padStart(2, "0")}`;
   const [yearStr, monthStr] = targetYm.split("-");
   const year = Number(yearStr);
   const month = Number(monthStr);
@@ -63,10 +63,10 @@ export default async function HistoryPage({
     };
   }
 
-  const prevDate = new Date(year, month - 2, 1);
-  const nextDate = new Date(year, month, 1);
-  const prevYm = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-  const nextYm = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+  const prevDateUtc = new Date(Date.UTC(year, month - 2, 1));
+  const nextDateUtc = new Date(Date.UTC(year, month, 1));
+  const prevYm = `${prevDateUtc.getUTCFullYear()}-${String(prevDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
+  const nextYm = `${nextDateUtc.getUTCFullYear()}-${String(nextDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
   const records = await dbAll<AttendanceRecord>(
     `SELECT punch_type, punched_at
@@ -137,7 +137,7 @@ export default async function HistoryPage({
           className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[13px] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-body)] hover:text-[var(--text-primary)]"
         >
           <ChevronLeft size={14} strokeWidth={1.75} />
-          {prevDate.getFullYear()}年{prevDate.getMonth() + 1}月
+          {prevDateUtc.getUTCFullYear()}年{prevDateUtc.getUTCMonth() + 1}月
         </Link>
         <div className="text-[15px] font-semibold tracking-tight">
           {year}年{month}月
@@ -146,7 +146,7 @@ export default async function HistoryPage({
           href={`/history?ym=${nextYm}${userParam}`}
           className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[13px] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-body)] hover:text-[var(--text-primary)]"
         >
-          {nextDate.getFullYear()}年{nextDate.getMonth() + 1}月
+          {nextDateUtc.getUTCFullYear()}年{nextDateUtc.getUTCMonth() + 1}月
           <ChevronRight size={14} strokeWidth={1.75} />
         </Link>
       </div>
@@ -220,8 +220,9 @@ export default async function HistoryPage({
             </thead>
             <tbody>
               {summaries.map((s) => {
-                const d = new Date(s.date);
-                const dow = d.getDay();
+                // s.date は "YYYY-MM-DD" (JSTローカル日付)
+                const [, sm, sd] = s.date.split("-").map(Number);
+                const dow = dayOfWeekFromYmd(s.date);
                 const isWeekend = dow === 0 || dow === 6;
                 const isEmpty = s.workMinutes === 0;
                 const isToday = s.date === todayStr;
@@ -247,7 +248,7 @@ export default async function HistoryPage({
                             : "text-[var(--text-secondary)]"
                         }`}
                       >
-                        {d.getMonth() + 1}/{d.getDate()}
+                        {sm}/{sd}
                       </span>
                     </Td>
                     <Td>

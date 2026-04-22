@@ -13,13 +13,17 @@ import {
   statusLabel,
   type ExpenseClaim,
 } from "@/lib/expenses";
+import {
+  jstComponents,
+  dayOfWeekFromYmd,
+  formatTime as formatJSTTime,
+} from "@/lib/time";
 
 const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
 
 function formatTime(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatJSTTime(iso);
 }
 
 export async function GET(req: Request) {
@@ -27,7 +31,11 @@ export async function GET(req: Request) {
   if (!current) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const ym = url.searchParams.get("ym") ?? new Date().toISOString().slice(0, 7);
+  const defaultYm = (() => {
+    const c = jstComponents();
+    return `${c.year}-${String(c.month).padStart(2, "0")}`;
+  })();
+  const ym = url.searchParams.get("ym") ?? defaultYm;
   const requestedUserId = Number(url.searchParams.get("user_id") ?? current.id);
 
   // 他人の勤怠はadminのみ閲覧可
@@ -84,7 +92,9 @@ export async function GET(req: Request) {
   sheet.getCell("D3").value = "対象月:";
   sheet.getCell("E3").value = `${year}年${month}月`;
   sheet.getCell("D4").value = "出力日:";
-  sheet.getCell("E4").value = new Date().toLocaleDateString("ja-JP");
+  // 出力日はJST
+  const nowJst = jstComponents();
+  sheet.getCell("E4").value = `${nowJst.year}/${nowJst.month}/${nowJst.day}`;
 
   for (const addr of ["A3", "A4", "D3", "D4"]) {
     sheet.getCell(addr).font = { name: "Yu Gothic", size: 10, bold: true };
@@ -129,12 +139,14 @@ export async function GET(req: Request) {
   // データ行
   summaries.forEach((s, idx) => {
     const rowNum = headerRow + 1 + idx;
-    const d = new Date(s.date);
-    const dayOfWeek = DAY_JP[d.getDay()];
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    // s.date は "YYYY-MM-DD"（JSTローカル日付）
+    const [, sMonth, sDay] = s.date.split("-").map(Number);
+    const dow = dayOfWeekFromYmd(s.date);
+    const dayOfWeek = DAY_JP[dow];
+    const isWeekend = dow === 0 || dow === 6;
 
     const values = [
-      `${d.getMonth() + 1}/${d.getDate()}`,
+      `${sMonth}/${sDay}`,
       dayOfWeek,
       formatTime(s.clockIn),
       formatTime(s.clockOut),

@@ -11,6 +11,7 @@ import {
   PlayCircle,
   type LucideIcon,
 } from "lucide-react";
+import { formatTime as formatJSTTime } from "@/lib/time";
 
 type TodayRecord = {
   punch_type: string;
@@ -75,10 +76,7 @@ function getStatus(lastType: string | undefined): Status {
   }
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+const formatTime = formatJSTTime;
 
 // 勤務中の経過時間を計算（休憩時間を差し引く）
 function computeElapsedMinutes(records: TodayRecord[], now: Date): number {

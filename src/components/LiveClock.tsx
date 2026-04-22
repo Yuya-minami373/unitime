@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
+import { jstComponents } from "@/lib/time";
 
 export default function LiveClock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -12,10 +13,11 @@ export default function LiveClock() {
     return () => clearInterval(timer);
   }, []);
 
-  // SSRでは固定表示、クライアント側で更新
-  const hh = now ? String(now.getHours()).padStart(2, "0") : "--";
-  const mm = now ? String(now.getMinutes()).padStart(2, "0") : "--";
-  const ss = now ? String(now.getSeconds()).padStart(2, "0") : "--";
+  // SSRでは固定表示、クライアント側で更新（ブラウザTZに依存せずJSTを表示）
+  const c = now ? jstComponents(now) : null;
+  const hh = c ? String(c.hour).padStart(2, "0") : "--";
+  const mm = c ? String(c.minute).padStart(2, "0") : "--";
+  const ss = c ? String(c.second).padStart(2, "0") : "--";
 
   return (
     <div className="u-card inline-flex items-center gap-3 px-4 py-3">
