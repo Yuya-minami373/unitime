@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS users (
   status TEXT NOT NULL DEFAULT 'active',
   -- 所定労働時間（分）: ユニポール社員は9:15-17:15・休憩45分 = 7h15m = 435分
   standard_work_minutes INTEGER NOT NULL DEFAULT 435,
+  -- 自宅座標（社員のみ任意登録・在宅打刻の位置ラベル判定に使用）
+  home_latitude REAL,
+  home_longitude REAL,
   created_at TEXT DEFAULT (datetime('now', '+9 hours')),
   updated_at TEXT DEFAULT (datetime('now', '+9 hours'))
 );

@@ -5,12 +5,18 @@ import { jstComponents, dayOfWeekFromYmd } from "./time";
 export type AttendanceRecord = {
   punch_type: string;
   punched_at: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type DaySummary = {
   date: string;
   clockIn: string | null;
   clockOut: string | null;
+  clockInLat: number | null;
+  clockInLng: number | null;
+  clockOutLat: number | null;
+  clockOutLng: number | null;
   breakMinutes: number;
   autoBreakApplied: boolean;   // 自動控除が効いた日か（手動打刻が法定最低を満たさないケース）
   workMinutes: number;
@@ -69,9 +75,11 @@ export function summarizeDay(
     a.punched_at < b.punched_at ? -1 : 1,
   );
 
-  const clockIn = sorted.find((r) => r.punch_type === "clock_in")?.punched_at ?? null;
+  const clockInRec = sorted.find((r) => r.punch_type === "clock_in");
   const clockOutRecords = sorted.filter((r) => r.punch_type === "clock_out");
-  const clockOut = clockOutRecords[clockOutRecords.length - 1]?.punched_at ?? null;
+  const clockOutRec = clockOutRecords[clockOutRecords.length - 1];
+  const clockIn = clockInRec?.punched_at ?? null;
+  const clockOut = clockOutRec?.punched_at ?? null;
 
   // 休憩時間の合計を計算（手動打刻分）
   let manualBreakMinutes = 0;
@@ -132,6 +140,10 @@ export function summarizeDay(
     date,
     clockIn,
     clockOut,
+    clockInLat: clockInRec?.latitude ?? null,
+    clockInLng: clockInRec?.longitude ?? null,
+    clockOutLat: clockOutRec?.latitude ?? null,
+    clockOutLng: clockOutRec?.longitude ?? null,
     breakMinutes: Math.round(effectiveBreakMinutes),
     autoBreakApplied,
     workMinutes: Math.round(workMinutes),

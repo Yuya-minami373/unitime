@@ -12,6 +12,13 @@ import {
   formatHoursDecimal,
   type AttendanceRecord,
 } from "@/lib/attendance";
+import {
+  classifyLocation,
+  getHQCoords,
+  getGeofenceRadius,
+  type LocationLabel,
+} from "@/lib/location";
+import LocationBadge from "@/components/LocationBadge";
 import { jstComponents, formatTime as formatJSTTime, dayOfWeekFromYmd } from "@/lib/time";
 
 function formatTime(iso: string | null): string {
@@ -38,10 +45,20 @@ export default async function HistoryPage({
   const month = Number(monthStr);
 
   // 他ユーザー指定は admin/owner のみ
-  let viewUser: { id: number; name: string; standard_work_minutes: number } = {
+  let viewUser: {
+    id: number;
+    name: string;
+    standard_work_minutes: number;
+    employment_type: string;
+    home_latitude: number | null;
+    home_longitude: number | null;
+  } = {
     id: currentUser.id,
     name: currentUser.name,
     standard_work_minutes: currentUser.standard_work_minutes,
+    employment_type: currentUser.employment_type,
+    home_latitude: currentUser.home_latitude,
+    home_longitude: currentUser.home_longitude,
   };
   const requestedId = params.user_id ? Number(params.user_id) : null;
   const isOtherUser = requestedId !== null && requestedId !== currentUser.id;
@@ -51,8 +68,12 @@ export default async function HistoryPage({
       id: number;
       name: string;
       standard_work_minutes: number | null;
+      employment_type: string;
+      home_latitude: number | null;
+      home_longitude: number | null;
     }>(
-      `SELECT id, name, standard_work_minutes FROM users WHERE id = ?`,
+      `SELECT id, name, standard_work_minutes, employment_type, home_latitude, home_longitude
+       FROM users WHERE id = ?`,
       [requestedId],
     );
     if (!other) redirect("/admin");
@@ -60,6 +81,9 @@ export default async function HistoryPage({
       id: other.id,
       name: other.name,
       standard_work_minutes: other.standard_work_minutes ?? 435,
+      employment_type: other.employment_type,
+      home_latitude: other.home_latitude,
+      home_longitude: other.home_longitude,
     };
   }
 
@@ -69,7 +93,7 @@ export default async function HistoryPage({
   const nextYm = `${nextDateUtc.getUTCFullYear()}-${String(nextDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
   const records = await dbAll<AttendanceRecord>(
-    `SELECT punch_type, punched_at
+    `SELECT punch_type, punched_at, latitude, longitude
      FROM attendance_records
      WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
      ORDER BY punched_at ASC`,
@@ -78,6 +102,19 @@ export default async function HistoryPage({
 
   const summaries = summarizeMonth(year, month, records, viewUser.standard_work_minutes);
   const total = calcMonthTotal(summaries);
+
+  // 位置ラベル判定用（社員のみ）
+  const hq = getHQCoords();
+  const geofenceRadius = getGeofenceRadius();
+  const home =
+    viewUser.employment_type === "employee"
+      ? { lat: viewUser.home_latitude, lng: viewUser.home_longitude }
+      : null;
+  const isEmployee = viewUser.employment_type === "employee";
+  function labelFor(lat: number | null, lng: number | null): LocationLabel {
+    if (!isEmployee) return "none";
+    return classifyLocation(lat, lng, home, hq, geofenceRadius);
+  }
 
   // 月ナビにuser_idを保持
   const userParam = isOtherUser ? `&user_id=${viewUser.id}` : "";
@@ -250,11 +287,17 @@ export default async function HistoryPage({
                     {isEmpty ? (
                       <span className="text-[var(--text-quaternary)]">—</span>
                     ) : (
-                      <>
-                        <span>{formatTime(s.clockIn)}</span>
-                        <span className="mx-1 text-[var(--text-quaternary)]">→</span>
-                        <span>{formatTime(s.clockOut)}</span>
-                      </>
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        <span className="inline-flex items-center gap-1">
+                          <LocationBadge label={labelFor(s.clockInLat, s.clockInLng)} />
+                          {formatTime(s.clockIn)}
+                        </span>
+                        <span className="text-[var(--text-quaternary)]">→</span>
+                        <span className="inline-flex items-center gap-1">
+                          <LocationBadge label={labelFor(s.clockOutLat, s.clockOutLng)} />
+                          {formatTime(s.clockOut)}
+                        </span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -361,8 +404,26 @@ export default async function HistoryPage({
                         {DAY_JP[dow]}
                       </span>
                     </Td>
-                    <Td mono>{formatTime(s.clockIn)}</Td>
-                    <Td mono>{formatTime(s.clockOut)}</Td>
+                    <Td mono>
+                      {s.clockIn ? (
+                        <span className="inline-flex items-center gap-1">
+                          <LocationBadge label={labelFor(s.clockInLat, s.clockInLng)} />
+                          {formatTime(s.clockIn)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </Td>
+                    <Td mono>
+                      {s.clockOut ? (
+                        <span className="inline-flex items-center gap-1">
+                          <LocationBadge label={labelFor(s.clockOutLat, s.clockOutLng)} />
+                          {formatTime(s.clockOut)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </Td>
                     <Td mono muted={!s.breakMinutes}>
                       {s.breakMinutes > 0 ? (
                         <span className="inline-flex items-center gap-1">

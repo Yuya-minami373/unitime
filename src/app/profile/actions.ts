@@ -54,3 +54,34 @@ export async function changePasswordAndRedirect(formData: FormData): Promise<voi
   }
   redirect(`/profile?success=1`);
 }
+
+export async function saveHomeLocationAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.employment_type !== "employee") {
+    redirect(`/profile?home_error=${encodeURIComponent("自宅登録は社員のみ利用可能です")}`);
+  }
+
+  const lat = Number(formData.get("latitude"));
+  const lng = Number(formData.get("longitude"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    redirect(`/profile?home_error=${encodeURIComponent("位置情報を取得できませんでした")}`);
+  }
+
+  await dbRun(
+    `UPDATE users SET home_latitude = ?, home_longitude = ? WHERE id = ?`,
+    [lat, lng, user.id],
+  );
+  redirect(`/profile?home_success=saved`);
+}
+
+export async function clearHomeLocationAction(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  await dbRun(
+    `UPDATE users SET home_latitude = NULL, home_longitude = NULL WHERE id = ?`,
+    [user.id],
+  );
+  redirect(`/profile?home_success=cleared`);
+}

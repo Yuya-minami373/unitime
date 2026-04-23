@@ -2,16 +2,22 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import { changePasswordAndRedirect } from "./actions";
+import HomeLocationCard from "./HomeLocationCard";
 
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+    home_success?: string;
+    home_error?: string;
+  }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const { error, success } = await searchParams;
+  const { error, success, home_success, home_error } = await searchParams;
 
   return (
     <AppShell user={{ name: user.name, role: user.role, employment: user.employment_type }}>
@@ -38,6 +44,26 @@ export default async function ProfilePage({
             <dd>{employmentLabel(user.employment_type)}</dd>
           </dl>
         </section>
+
+        {user.employment_type === "employee" && (
+          <>
+            {home_success && (
+              <div className="rounded-[6px] bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+                ✅ {home_success === "cleared" ? "自宅の位置情報を解除しました" : "自宅の位置情報を登録しました"}
+              </div>
+            )}
+            {home_error && (
+              <div className="rounded-[6px] bg-rose-50 px-3 py-2 text-[12px] text-rose-800">
+                {home_error}
+              </div>
+            )}
+            <HomeLocationCard
+              hasHome={user.home_latitude != null && user.home_longitude != null}
+              homeLat={user.home_latitude}
+              homeLng={user.home_longitude}
+            />
+          </>
+        )}
 
         <section className="rounded-[10px] border border-[var(--border-default)] bg-white p-5 shadow-[var(--shadow-subtle)]">
           <h2 className="mb-3 text-[14px] font-semibold">パスワード変更</h2>

@@ -34,6 +34,13 @@ import {
   type OvertimeLevel,
 } from "@/lib/attendance";
 import { listAllExpenses, formatYen } from "@/lib/expenses";
+import {
+  classifyLocation,
+  getHQCoords,
+  getGeofenceRadius,
+  type LocationLabel,
+} from "@/lib/location";
+import LocationBadge from "@/components/LocationBadge";
 import { Receipt } from "lucide-react";
 
 type User = {
@@ -42,6 +49,8 @@ type User = {
   login_id: string;
   employment_type: string;
   standard_work_minutes: number | null;
+  home_latitude: number | null;
+  home_longitude: number | null;
 };
 
 const EMPLOYMENT_LABEL: Record<string, string> = {
@@ -78,13 +87,14 @@ export default async function AdminPage({
   // users / 全員分の月次打刻（1回で取得して後でuser_idでグループ化）/ 承認待ち精算 を並列取得
   const [users, allMonthRecords, pendingExpenses] = await Promise.all([
     dbAll<User>(
-      `SELECT id, name, login_id, employment_type, standard_work_minutes
+      `SELECT id, name, login_id, employment_type, standard_work_minutes,
+              home_latitude, home_longitude
        FROM users
        WHERE status = 'active' AND role != 'owner'
        ORDER BY id`,
     ),
     dbAll<AttendanceRecord & { user_id: number }>(
-      `SELECT user_id, punch_type, punched_at
+      `SELECT user_id, punch_type, punched_at, latitude, longitude
        FROM attendance_records a
        WHERE substr(punched_at, 1, 7) = ?
          AND user_id IN (SELECT id FROM users WHERE status = 'active' AND role != 'owner')
@@ -94,6 +104,9 @@ export default async function AdminPage({
     listAllExpenses({ status: ["pending", "ai_flagged"] }),
   ]);
 
+  const hq = getHQCoords();
+  const geofenceRadius = getGeofenceRadius();
+
   // user_idごとにメモリ上でグループ化（N+1クエリを1クエリに圧縮）
   const recordsByUser = new Map<number, AttendanceRecord[]>();
   for (const r of allMonthRecords) {
@@ -101,6 +114,8 @@ export default async function AdminPage({
     recordsByUser.get(r.user_id)!.push({
       punch_type: r.punch_type,
       punched_at: r.punched_at,
+      latitude: r.latitude,
+      longitude: r.longitude,
     });
   }
 
@@ -122,7 +137,21 @@ export default async function AdminPage({
     const anomalies = detectAnomalies(summaries, today);
     const level = overtimeLevel(total.totalOvertimeMinutes);
 
-    return { user: u, total, status, todaySummary, anomalies, level };
+    // 社員のみ位置ラベル判定（業務委託・クルーは判定対象外）
+    const home =
+      u.employment_type === "employee"
+        ? { lat: u.home_latitude, lng: u.home_longitude }
+        : null;
+    const inLabel: LocationLabel =
+      u.employment_type === "employee"
+        ? classifyLocation(todaySummary.clockInLat, todaySummary.clockInLng, home, hq, geofenceRadius)
+        : "none";
+    const outLabel: LocationLabel =
+      u.employment_type === "employee"
+        ? classifyLocation(todaySummary.clockOutLat, todaySummary.clockOutLng, home, hq, geofenceRadius)
+        : "none";
+
+    return { user: u, total, status, todaySummary, anomalies, level, inLabel, outLabel };
   });
 
   // 在勤状況カウント
@@ -401,7 +430,7 @@ export default async function AdminPage({
       <div className="u-card overflow-hidden">
         {/* Mobile cards */}
         <ul className="divide-y divide-[var(--border-light)] md:hidden">
-          {userSummaries.map(({ user: u, total, status, todaySummary }) => (
+          {userSummaries.map(({ user: u, total, status, todaySummary, inLabel, outLabel }) => (
             <li key={u.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-1">
@@ -415,7 +444,12 @@ export default async function AdminPage({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill status={status} />
-                    <TodayPunchInline clockIn={todaySummary.clockIn} clockOut={todaySummary.clockOut} />
+                    <TodayPunchInline
+                      clockIn={todaySummary.clockIn}
+                      clockOut={todaySummary.clockOut}
+                      inLabel={inLabel}
+                      outLabel={outLabel}
+                    />
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
@@ -489,7 +523,7 @@ export default async function AdminPage({
               </tr>
             </thead>
             <tbody>
-              {userSummaries.map(({ user: u, total, status, todaySummary }) => (
+              {userSummaries.map(({ user: u, total, status, todaySummary, inLabel, outLabel }) => (
                 <tr
                   key={u.id}
                   className="border-b border-[var(--border-light)] transition-colors last:border-0 hover:bg-[var(--brand-50)]"
@@ -503,10 +537,10 @@ export default async function AdminPage({
                     <StatusPill status={status} />
                   </td>
                   <td className="px-4 py-3 tabular-nums">
-                    <TodayTimeCell iso={todaySummary.clockIn} />
+                    <TodayTimeCell iso={todaySummary.clockIn} label={inLabel} />
                   </td>
                   <td className="px-4 py-3 tabular-nums">
-                    <TodayTimeCell iso={todaySummary.clockOut} />
+                    <TodayTimeCell iso={todaySummary.clockOut} label={outLabel} />
                   </td>
                   <td className="px-4 py-3">
                     <span className="rounded-[4px] border border-[var(--border-light)] bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
@@ -563,19 +597,28 @@ function Th({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TodayTimeCell({ iso }: { iso: string | null }) {
+function TodayTimeCell({ iso, label }: { iso: string | null; label: LocationLabel }) {
   if (!iso) {
     return <span className="text-[var(--text-quaternary)]">—</span>;
   }
-  return <span className="text-[var(--text-primary)]">{formatTime(iso)}</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <LocationBadge label={label} />
+      <span className="text-[var(--text-primary)]">{formatTime(iso)}</span>
+    </span>
+  );
 }
 
 function TodayPunchInline({
   clockIn,
   clockOut,
+  inLabel,
+  outLabel,
 }: {
   clockIn: string | null;
   clockOut: string | null;
+  inLabel: LocationLabel;
+  outLabel: LocationLabel;
 }) {
   if (!clockIn && !clockOut) {
     return (
@@ -583,10 +626,24 @@ function TodayPunchInline({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] tabular-nums text-[var(--text-secondary)]">
-      <span>出 {clockIn ? formatTime(clockIn) : "—"}</span>
+    <span className="inline-flex flex-wrap items-center gap-1 text-[11px] tabular-nums text-[var(--text-secondary)]">
+      {clockIn ? (
+        <span className="inline-flex items-center gap-1">
+          <LocationBadge label={inLabel} />
+          出 {formatTime(clockIn)}
+        </span>
+      ) : (
+        <span>出 —</span>
+      )}
       <span className="text-[var(--text-quaternary)]">→</span>
-      <span>退 {clockOut ? formatTime(clockOut) : "—"}</span>
+      {clockOut ? (
+        <span className="inline-flex items-center gap-1">
+          <LocationBadge label={outLabel} />
+          退 {formatTime(clockOut)}
+        </span>
+      ) : (
+        <span>退 —</span>
+      )}
     </span>
   );
 }

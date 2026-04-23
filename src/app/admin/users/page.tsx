@@ -18,6 +18,8 @@ type User = {
   hourly_rate: number | null;
   hire_date: string | null;
   status: string;
+  home_latitude: number | null;
+  home_longitude: number | null;
 };
 
 async function createUser(formData: FormData) {
@@ -126,7 +128,8 @@ export default async function UsersPage({
   const { error, success, login_id: errLoginId, detail } = await searchParams;
 
   const users = await dbAll<User>(
-    `SELECT id, login_id, name, email, employment_type, role, monthly_salary, hourly_rate, hire_date, status
+    `SELECT id, login_id, name, email, employment_type, role, monthly_salary, hourly_rate, hire_date, status,
+            home_latitude, home_longitude
      FROM users ORDER BY status = 'active' DESC, id`,
   );
 
@@ -200,6 +203,16 @@ export default async function UsersPage({
                       ? `時給¥${u.hourly_rate}`
                       : "給与未設定"}
                   </div>
+                  {u.employment_type === "employee" && (
+                    <div className="text-[11px] text-[var(--text-tertiary)]">
+                      自宅登録:{" "}
+                      {u.home_latitude != null && u.home_longitude != null ? (
+                        <span className="text-[#047857]">✓ 登録済</span>
+                      ) : (
+                        <span className="text-[var(--text-quaternary)]">未登録</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   {u.status === "active" ? (
@@ -254,6 +267,7 @@ export default async function UsersPage({
                 <Th>雇用形態</Th>
                 <Th>権限</Th>
                 <Th>給与</Th>
+                <Th>自宅登録</Th>
                 <Th>入社日</Th>
                 <Th>状態</Th>
                 <Th></Th>
@@ -297,6 +311,17 @@ export default async function UsersPage({
                       : u.hourly_rate
                       ? `時給¥${u.hourly_rate}`
                       : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-[12px]">
+                    {u.employment_type === "employee" ? (
+                      u.home_latitude != null && u.home_longitude != null ? (
+                        <span className="text-[#047857]">✓ 登録済</span>
+                      ) : (
+                        <span className="text-[var(--text-quaternary)]">未登録</span>
+                      )
+                    ) : (
+                      <span className="text-[var(--text-quaternary)]">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-[12px] text-[var(--text-tertiary)]">
                     {u.hire_date ?? "—"}

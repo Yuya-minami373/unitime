@@ -50,6 +50,8 @@ export type SessionUser = {
   employment_type: string;
   role: string;
   standard_work_minutes: number; // 所定労働時間（分）
+  home_latitude: number | null;
+  home_longitude: number | null;
 };
 
 // 権限ヘルパー
@@ -79,10 +81,12 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     employment_type: string;
     role: string;
     standard_work_minutes: number | null;
+    home_latitude: number | null;
+    home_longitude: number | null;
     expires_at: string;
   }>(
     `SELECT u.id, u.login_id, u.name, u.email, u.employment_type, u.role,
-            u.standard_work_minutes, s.expires_at
+            u.standard_work_minutes, u.home_latitude, u.home_longitude, s.expires_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND u.status = 'active'`,
     [sessionId],
@@ -99,6 +103,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     employment_type: row.employment_type,
     role: row.role,
     standard_work_minutes: row.standard_work_minutes ?? 435,
+    home_latitude: row.home_latitude,
+    home_longitude: row.home_longitude,
   };
 }
 
