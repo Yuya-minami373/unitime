@@ -19,10 +19,11 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { dbAll } from "@/lib/db";
-import { nowJST, jstComponents } from "@/lib/time";
+import { nowJST, jstComponents, formatTime } from "@/lib/time";
 import AppShell from "@/components/AppShell";
 import {
   summarizeMonth,
+  summarizeDay,
   calcMonthTotal,
   formatHoursDecimal,
   currentWorkStatus,
@@ -117,10 +118,11 @@ export default async function AdminPage({
       (r) => r.punched_at.slice(0, 10) === today,
     );
     const status = currentWorkStatus(todayRecords);
+    const todaySummary = summarizeDay(today, todayRecords, u.standard_work_minutes ?? 435);
     const anomalies = detectAnomalies(summaries, today);
     const level = overtimeLevel(total.totalOvertimeMinutes);
 
-    return { user: u, total, status, anomalies, level };
+    return { user: u, total, status, todaySummary, anomalies, level };
   });
 
   // 在勤状況カウント
@@ -399,7 +401,7 @@ export default async function AdminPage({
       <div className="u-card overflow-hidden">
         {/* Mobile cards */}
         <ul className="divide-y divide-[var(--border-light)] md:hidden">
-          {userSummaries.map(({ user: u, total, status }) => (
+          {userSummaries.map(({ user: u, total, status, todaySummary }) => (
             <li key={u.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-1">
@@ -411,7 +413,10 @@ export default async function AdminPage({
                       {EMPLOYMENT_LABEL[u.employment_type] ?? u.employment_type}
                     </span>
                   </div>
-                  <StatusPill status={status} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusPill status={status} />
+                    <TodayPunchInline clockIn={todaySummary.clockIn} clockOut={todaySummary.clockOut} />
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
                   <Link
@@ -474,6 +479,8 @@ export default async function AdminPage({
               <tr className="border-b border-[var(--border-brand)] bg-[var(--brand-50)] text-left">
                 <Th>氏名</Th>
                 <Th>状態</Th>
+                <Th>本日出勤</Th>
+                <Th>本日退勤</Th>
                 <Th>雇用形態</Th>
                 <Th>稼働日数</Th>
                 <Th>実働時間</Th>
@@ -482,7 +489,7 @@ export default async function AdminPage({
               </tr>
             </thead>
             <tbody>
-              {userSummaries.map(({ user: u, total, status }) => (
+              {userSummaries.map(({ user: u, total, status, todaySummary }) => (
                 <tr
                   key={u.id}
                   className="border-b border-[var(--border-light)] transition-colors last:border-0 hover:bg-[var(--brand-50)]"
@@ -494,6 +501,12 @@ export default async function AdminPage({
                   </td>
                   <td className="px-4 py-3">
                     <StatusPill status={status} />
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    <TodayTimeCell iso={todaySummary.clockIn} />
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    <TodayTimeCell iso={todaySummary.clockOut} />
                   </td>
                   <td className="px-4 py-3">
                     <span className="rounded-[4px] border border-[var(--border-light)] bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
@@ -547,6 +560,34 @@ function Th({ children }: { children: React.ReactNode }) {
     <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
       {children}
     </th>
+  );
+}
+
+function TodayTimeCell({ iso }: { iso: string | null }) {
+  if (!iso) {
+    return <span className="text-[var(--text-quaternary)]">—</span>;
+  }
+  return <span className="text-[var(--text-primary)]">{formatTime(iso)}</span>;
+}
+
+function TodayPunchInline({
+  clockIn,
+  clockOut,
+}: {
+  clockIn: string | null;
+  clockOut: string | null;
+}) {
+  if (!clockIn && !clockOut) {
+    return (
+      <span className="text-[11px] text-[var(--text-quaternary)]">本日の打刻なし</span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] tabular-nums text-[var(--text-secondary)]">
+      <span>出 {clockIn ? formatTime(clockIn) : "—"}</span>
+      <span className="text-[var(--text-quaternary)]">→</span>
+      <span>退 {clockOut ? formatTime(clockOut) : "—"}</span>
+    </span>
   );
 }
 
