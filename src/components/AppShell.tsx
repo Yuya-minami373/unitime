@@ -16,10 +16,16 @@ import {
   PanelLeftOpen,
   Receipt,
   KeyRound,
+  MapPin,
+  Building2,
+  UserCog,
+  CalendarCheck,
+  IdCard,
   type LucideIcon,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavGroup = { label?: string; items: NavItem[] };
 type User = { name: string; role: string; employment?: string };
 
 const baseMemberNav: NavItem[] = [
@@ -34,18 +40,51 @@ const teamNav: NavItem[] = [
   { href: "/admin/expenses", label: "精算承認", icon: Receipt },
 ];
 
+const crewMgmtNav: NavItem[] = [
+  { href: "/admin/elections", label: "案件マスタ", icon: CalendarCheck },
+  { href: "/admin/crews", label: "クルー名簿", icon: IdCard },
+  { href: "/admin/municipalities", label: "自治体マスタ", icon: Building2 },
+  { href: "/admin/polling-stations", label: "投票所マスタ", icon: MapPin },
+  { href: "/admin/roles", label: "役割マスタ", icon: UserCog },
+];
+
 const ownerNav: NavItem[] = [
   { href: "/admin/users", label: "ユーザー管理", icon: Settings },
 ];
 
-// role + 雇用形態で表示するナビを組み立てる
+// role + 雇用形態で表示するナビをグループ単位で組み立てる
 // クルー（crew）は打刻のみ。立替精算メニューは非表示
-function navFor(role: string, employment?: string): NavItem[] {
-  const memberNav =
+// 社員（employment=employee）には「クルー管理」セクションも表示
+function navFor(role: string, employment?: string): NavGroup[] {
+  const memberItems =
     employment === "crew" ? baseMemberNav : [...baseMemberNav, expenseNavItem];
-  if (role === "owner") return [...teamNav, ...ownerNav];
-  if (role === "admin") return [...memberNav, ...teamNav];
-  return memberNav;
+
+  if (role === "owner") {
+    return [
+      { items: teamNav },
+      { label: "クルー管理", items: crewMgmtNav },
+      { items: ownerNav },
+    ];
+  }
+
+  if (role === "admin") {
+    return [
+      { items: memberItems },
+      { items: teamNav },
+      ...(employment === "employee"
+        ? [{ label: "クルー管理", items: crewMgmtNav }]
+        : []),
+    ];
+  }
+
+  // member
+  if (employment === "employee") {
+    return [
+      { items: memberItems },
+      { label: "クルー管理", items: crewMgmtNav },
+    ];
+  }
+  return [{ items: memberItems }];
 }
 
 function initials(name: string): string {
@@ -170,7 +209,7 @@ function SidebarContent({
   onToggle?: () => void;
   onNavigate?: () => void;
 }) {
-  const navItems = navFor(user.role, user.employment);
+  const navGroups = navFor(user.role, user.employment);
   const empLabel =
     user.role === "owner"
       ? "CEO"
@@ -200,25 +239,37 @@ function SidebarContent({
         </div>
 
         {/* Nav */}
-        <nav>
-          <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <li key={item.href}>
-                  <NavLink
-                    item={item}
-                    active={isActive}
-                    collapsed={collapsed}
-                    onClick={onNavigate}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+        <nav className="flex flex-col gap-4">
+          {navGroups.map((group, gi) => (
+            <div key={gi}>
+              {group.label && !collapsed && (
+                <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--brand-primary)]/55">
+                  {group.label}
+                </div>
+              )}
+              {group.label && collapsed && gi > 0 && (
+                <div className="my-2 mx-2 border-t border-white/40" aria-hidden />
+              )}
+              <ul className="flex flex-col gap-1">
+                {group.items.map((item) => {
+                  const isActive =
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return (
+                    <li key={item.href}>
+                      <NavLink
+                        item={item}
+                        active={isActive}
+                        collapsed={collapsed}
+                        onClick={onNavigate}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
       </div>
 

@@ -9,3 +9,5 @@ node_modules/
 .vercel
 .aidesigner/*
 !.aidesigner/.gitkeep
+backups/
+tsconfig.tsbuildinfo
