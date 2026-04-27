@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ArrowLeft, Calendar, MapPin, DollarSign, Users } from "lucide-react";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageMasters } from "@/lib/auth";
 import { dbAll, dbGet, dbRun } from "@/lib/db";
 import AppShell from "@/components/AppShell";
 import { STATUS_OPTIONS } from "@/lib/elections";
@@ -69,7 +69,7 @@ const STATUS_BADGE: Record<string, string> = {
 async function upsertRate(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const election_id = Number(formData.get("election_id"));
   const role_id = Number(formData.get("role_id"));
@@ -114,7 +114,7 @@ async function upsertRate(formData: FormData) {
 async function deleteRate(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const election_id = Number(formData.get("election_id"));
   const role_id = Number(formData.get("role_id"));
@@ -132,7 +132,7 @@ async function deleteRate(formData: FormData) {
 async function saveStaffingRequirements(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const election_id = Number(formData.get("election_id"));
   if (!election_id) redirect(`/admin/elections/${election_id}?error=invalid_election`);
@@ -256,7 +256,7 @@ export default async function ElectionDetailPage({
 }) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
-  if (current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const { id } = await params;
   const electionId = Number(id);

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Plus, ArrowLeft, Pencil, Trash2, X, UserCog } from "lucide-react";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageMasters } from "@/lib/auth";
 import { dbAll, dbRun, dbGet } from "@/lib/db";
 import AppShell from "@/components/AppShell";
 import { ConfirmForm } from "./RoleActions";
@@ -21,7 +21,7 @@ type Role = {
 async function createRole(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
@@ -59,7 +59,7 @@ async function createRole(formData: FormData) {
 async function updateRole(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   const name = String(formData.get("name") ?? "").trim();
@@ -100,7 +100,7 @@ async function updateRole(formData: FormData) {
 async function deleteRole(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/roles");
@@ -148,7 +148,7 @@ export default async function RolesPage({
 }) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
-  if (current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const sp = await searchParams;
   const editId = sp.editId ? Number(sp.editId) : null;

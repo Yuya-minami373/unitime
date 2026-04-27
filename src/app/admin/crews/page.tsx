@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { UserPlus, Pencil, Trash2, Power } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageMasters } from "@/lib/auth";
 import { dbAll, dbGet, dbRun } from "@/lib/db";
 import AppShell from "@/components/AppShell";
 import { CrewForm } from "./CrewForm";
@@ -45,7 +45,7 @@ type MunicipalityOption = {
 async function createCrew(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const result = await upsertCrewFromForm(formData, null);
   if (typeof result === "string") redirect(`/admin/crews?error=${result}`);
@@ -57,7 +57,7 @@ async function createCrew(formData: FormData) {
 async function updateCrew(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/crews?error=invalid_id");
@@ -72,7 +72,7 @@ async function updateCrew(formData: FormData) {
 async function deactivateCrew(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/crews?error=invalid_id");
@@ -99,7 +99,7 @@ async function deactivateCrew(formData: FormData) {
 async function reactivateCrew(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/crews?error=invalid_id");
@@ -118,7 +118,7 @@ async function reactivateCrew(formData: FormData) {
 async function deleteCrew(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/crews?error=invalid_id");
@@ -321,7 +321,7 @@ export default async function CrewsPage({
 }) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
-  if (current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const sp = await searchParams;
   const editId = sp.editId ? Number(sp.editId) : null;

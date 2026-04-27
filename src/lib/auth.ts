@@ -68,6 +68,14 @@ export function canPunch(user: SessionUser | null): boolean {
   return !!user && user.role !== "owner";
 }
 
+// 業務マスタ管理（クルー名簿・案件・自治体・投票所・役割）画面の権限
+// 社員（employment_type='employee'）と経営幹部（role='owner'）が対象
+// 渡邉さん(employee) + 祐哉さん(owner/executive) を許可
+export function canManageMasters(user: SessionUser | null): boolean {
+  if (!user) return false;
+  return user.employment_type === "employee" || user.role === "owner";
+}
+
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE)?.value;

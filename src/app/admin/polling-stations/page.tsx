@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Plus, ArrowLeft, Pencil, Trash2, X, MapPin } from "lucide-react";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageMasters } from "@/lib/auth";
 import { dbAll, dbRun, dbGet } from "@/lib/db";
 import AppShell from "@/components/AppShell";
 import { ConfirmForm } from "./PollingStationActions";
@@ -31,7 +31,7 @@ type PollingStation = {
 async function createPollingStation(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const municipality_id = Number(formData.get("municipality_id"));
   const name = String(formData.get("name") ?? "").trim();
@@ -95,7 +95,7 @@ async function createPollingStation(formData: FormData) {
 async function updatePollingStation(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   const municipality_id = Number(formData.get("municipality_id"));
@@ -162,7 +162,7 @@ async function updatePollingStation(formData: FormData) {
 async function deletePollingStation(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/polling-stations");
@@ -199,7 +199,7 @@ export default async function PollingStationsPage({
 }) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
-  if (current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const sp = await searchParams;
   const editId = sp.editId ? Number(sp.editId) : null;

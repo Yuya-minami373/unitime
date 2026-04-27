@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Plus, ArrowLeft, Pencil, Trash2, X, CalendarCheck } from "lucide-react";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageMasters } from "@/lib/auth";
 import { dbAll, dbRun, dbGet } from "@/lib/db";
 import AppShell from "@/components/AppShell";
 import { ConfirmForm } from "./ElectionActions";
@@ -62,7 +62,7 @@ function validateDates(
 async function createElection(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const municipality_id = Number(formData.get("municipality_id"));
   const name = String(formData.get("name") ?? "").trim();
@@ -109,7 +109,7 @@ async function createElection(formData: FormData) {
 async function updateElection(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   const municipality_id = Number(formData.get("municipality_id"));
@@ -168,7 +168,7 @@ async function updateElection(formData: FormData) {
 async function deleteElection(formData: FormData) {
   "use server";
   const current = await getCurrentUser();
-  if (!current || current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/elections");
@@ -218,7 +218,7 @@ export default async function ElectionsPage({
 }) {
   const current = await getCurrentUser();
   if (!current) redirect("/login");
-  if (current.employment_type !== "employee") redirect("/admin");
+  if (!canManageMasters(current)) redirect("/admin");
 
   const sp = await searchParams;
   const editId = sp.editId ? Number(sp.editId) : null;
