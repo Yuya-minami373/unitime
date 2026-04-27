@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { dbRun, dbGet } from "@/lib/db";
-import { nowJST } from "@/lib/time";
+import { nowJST, nowBusinessDay, businessDayRange, businessDayFromIso } from "@/lib/time";
 
 const VALID_TYPES = ["clock_in", "clock_out", "break_start", "break_end"] as const;
 type PunchType = (typeof VALID_TYPES)[number];
@@ -24,14 +24,16 @@ export async function POST(req: Request) {
   const accuracy = typeof body.accuracy === "number" ? body.accuracy : null;
   const memo = typeof body.memo === "string" ? body.memo.slice(0, 500) : null;
 
-  const today = nowJST().slice(0, 10);
+  // "今日" は業務日ベース（JST 04:00 境界）
+  const today = nowBusinessDay();
+  const todayRange = businessDayRange(today);
 
-  // 1) 今日の最後の打刻（状態遷移判定）
+  // 1) 今日(業務日)の最後の打刻（状態遷移判定）
   const lastToday = await dbGet<{ punch_type: string; punched_at: string }>(
     `SELECT punch_type, punched_at FROM attendance_records
-     WHERE user_id = ? AND substr(punched_at, 1, 10) = ?
+     WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
      ORDER BY punched_at DESC LIMIT 1`,
-    [user.id, today],
+    [user.id, todayRange.startIso, todayRange.endIso],
   );
 
   // 2) 連打防止: 3秒以内の再打刻をブロック
@@ -45,24 +47,23 @@ export async function POST(req: Request) {
     }
   }
 
-  // 3) クロスデー未退勤チェック: 前日以前に clock_in のまま退勤打刻がない場合は clock_in をブロック
+  // 3) クロスデー未退勤チェック: 過去の業務日の clock_in に対応する clock_out が無ければブロック
   if (punchType === "clock_in") {
     const openShift = await dbGet<{ punched_at: string }>(
       `SELECT punched_at FROM attendance_records a
        WHERE user_id = ? AND punch_type = 'clock_in'
-         AND substr(punched_at, 1, 10) < ?
+         AND punched_at < ?
          AND NOT EXISTS (
            SELECT 1 FROM attendance_records b
            WHERE b.user_id = a.user_id
              AND b.punch_type = 'clock_out'
              AND b.punched_at > a.punched_at
-             AND substr(b.punched_at, 1, 10) = substr(a.punched_at, 1, 10)
          )
        ORDER BY punched_at DESC LIMIT 1`,
-      [user.id, today],
+      [user.id, todayRange.startIso],
     );
     if (openShift) {
-      const date = openShift.punched_at.slice(0, 10);
+      const date = businessDayFromIso(openShift.punched_at);
       return NextResponse.json(
         {
           error: `${date} の退勤打刻が未完了です。管理者に修正を依頼してください。`,

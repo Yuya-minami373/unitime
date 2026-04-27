@@ -79,3 +79,51 @@ export function dayOfWeekFromYmd(ymd: string): number {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
 }
+
+// =====================================================================
+// 業務日（business day）境界
+// 0:00基準では23時出勤・翌2時退勤などの日跨ぎ勤務が分断されてしまうため、
+// JST 04:00 を境界とする「業務日」概念を導入する。
+//   - 04:00以降の打刻 → その暦日の業務日に属する
+//   - 00:00〜03:59の打刻 → 前日の業務日に属する
+// クルー開票業務（22-23時頃終了）まで安全にカバーする想定。
+// =====================================================================
+export const BUSINESS_DAY_BOUNDARY_HOUR = 4;
+
+// ISO文字列からその打刻が属する業務日（YYYY-MM-DD）を返す
+export function businessDayFromIso(iso: string): string {
+  const c = jstComponents(iso);
+  if (c.hour >= BUSINESS_DAY_BOUNDARY_HOUR) {
+    return `${c.year}-${String(c.month).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
+  }
+  // 00:00〜03:59 は前日の業務日
+  const prev = new Date(Date.UTC(c.year, c.month - 1, c.day - 1));
+  return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}-${String(prev.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function nowBusinessDay(): string {
+  return businessDayFromIso(nowJST());
+}
+
+// 業務月レンジ（SQL BETWEEN/比較用のISO文字列）
+//   year=2026, month=4 の場合: 2026-04-01T04:00:00+09:00 ～ 2026-05-01T04:00:00+09:00（exclusive）
+export function businessMonthRange(
+  year: number,
+  month: number,
+): { startIso: string; endIso: string } {
+  const startIso = `${year}-${String(month).padStart(2, "0")}-01T04:00:00+09:00`;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const endIso = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01T04:00:00+09:00`;
+  return { startIso, endIso };
+}
+
+// 業務日レンジ（SQL用）
+//   "2026-04-26" の場合: 2026-04-26T04:00:00+09:00 ～ 2026-04-27T04:00:00+09:00
+export function businessDayRange(ymd: string): { startIso: string; endIso: string } {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const startIso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T04:00:00+09:00`;
+  const next = new Date(Date.UTC(y!, m! - 1, d! + 1));
+  const endIso = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}T04:00:00+09:00`;
+  return { startIso, endIso };
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { dbAll } from "@/lib/db";
-import { nowJST, jstComponents } from "@/lib/time";
+import { nowJST, jstComponents, nowBusinessDay, businessDayRange, businessMonthRange, businessDayFromIso } from "@/lib/time";
 import AppShell from "@/components/AppShell";
 import PunchPanel from "@/components/PunchPanel";
 import LiveClock from "@/components/LiveClock";
@@ -43,33 +43,37 @@ export default async function HomePage() {
   // 代表取締役など打刻対象外のユーザーは管理者画面へ
   if (user.role === "owner") redirect("/admin");
 
-  const today = nowJST().slice(0, 10);
+  // "今日" は業務日ベース（JST 04:00 境界。0:00〜3:59は前日扱い）
+  const today = nowBusinessDay();
   const now = new Date();
   const jstNow = jstComponents(now);
-  const year = jstNow.year;
-  const month = jstNow.month;
-  const ym = `${year}-${String(month).padStart(2, "0")}`;
+  const [todayY, todayM] = today.split("-").map(Number);
+  // 月集計は「業務月」基準。深夜帯にまたがる日は含む業務月で扱う
+  const year = todayY!;
+  const month = todayM!;
+  const todayRange = businessDayRange(today);
+  const monthRange = businessMonthRange(year, month);
 
   // 今週の日付範囲をまず決める
   const weekDateArray = weekDates(now);
   const weekStart = weekDateArray[0];
   const weekEnd = weekDateArray[6];
 
-  // 本日・今月・今週の3クエリを並列実行（直列だと3xラウンドトリップ、並列だと1x）
+  // 本日(業務日)・今月(業務月)・今週の3クエリを並列実行
   const [records, monthRecords, weekRecords] = await Promise.all([
     dbAll<PunchRecord>(
       `SELECT punch_type, punched_at, latitude, longitude
        FROM attendance_records
-       WHERE user_id = ? AND substr(punched_at, 1, 10) = ?
+       WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
        ORDER BY punched_at DESC`,
-      [user.id, today],
+      [user.id, todayRange.startIso, todayRange.endIso],
     ),
     dbAll<AttendanceRecord>(
       `SELECT punch_type, punched_at
        FROM attendance_records
-       WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
+       WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
        ORDER BY punched_at ASC`,
-      [user.id, ym],
+      [user.id, monthRange.startIso, monthRange.endIso],
     ),
     dbAll<AttendanceRecord>(
       `SELECT punch_type, punched_at
@@ -100,10 +104,10 @@ export default async function HomePage() {
   // 平均出退勤時刻（今月分）
   const { avgClockIn, avgClockOut } = averageTimes(monthSummaries);
 
-  // 今週の日別集計
+  // 今週の日別集計（業務日ベース）
   const weekRecordsByDate = new Map<string, AttendanceRecord[]>();
   for (const r of weekRecords) {
-    const date = r.punched_at.slice(0, 10);
+    const date = businessDayFromIso(r.punched_at);
     if (!weekRecordsByDate.has(date)) weekRecordsByDate.set(date, []);
     weekRecordsByDate.get(date)!.push(r);
   }
@@ -122,7 +126,10 @@ export default async function HomePage() {
   const greeting =
     hour < 11 ? "おはようございます" : hour < 17 ? "こんにちは" : "お疲れ様です";
   const displayName = user.name.split(/\s+/)[0] ?? user.name;
-  const dateLabel = `${year}年${month}月${jstNow.day}日（${DAY_JP[jstNow.dayOfWeek]}）`;
+  // dateLabel は業務日ベース（深夜0-4時の打刻時に前日が表示される）
+  const [, , todayD] = today.split("-").map(Number);
+  const todayDow = new Date(Date.UTC(year, month - 1, todayD!)).getUTCDay();
+  const dateLabel = `${year}年${month}月${todayD}日（${DAY_JP[todayDow]}）`;
 
   return (
     <AppShell user={{ name: user.name, role: user.role, employment: user.employment_type }}>

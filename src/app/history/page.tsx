@@ -19,7 +19,7 @@ import {
   type LocationLabel,
 } from "@/lib/location";
 import LocationBadge from "@/components/LocationBadge";
-import { jstComponents, formatTime as formatJSTTime, dayOfWeekFromYmd } from "@/lib/time";
+import { jstComponents, formatTime as formatJSTTime, dayOfWeekFromYmd, businessMonthRange } from "@/lib/time";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -92,12 +92,13 @@ export default async function HistoryPage({
   const prevYm = `${prevDateUtc.getUTCFullYear()}-${String(prevDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
   const nextYm = `${nextDateUtc.getUTCFullYear()}-${String(nextDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
+  const monthRange = businessMonthRange(year, month);
   const records = await dbAll<AttendanceRecord>(
     `SELECT punch_type, punched_at, latitude, longitude
      FROM attendance_records
-     WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
+     WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
      ORDER BY punched_at ASC`,
-    [viewUser.id, targetYm],
+    [viewUser.id, monthRange.startIso, monthRange.endIso],
   );
 
   const summaries = summarizeMonth(year, month, records, viewUser.standard_work_minutes);
@@ -208,13 +209,19 @@ export default async function HistoryPage({
         />
       </div>
 
-      {/* KPI row 2: 社労士向け実績（深夜・土日・法定休日） */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
+      {/* KPI row 2: 社労士向け実績（深夜・深夜残業・土日・法定休日） */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4">
         <StatTile
           label="深夜労働（22:00〜5:00）"
           value={formatHoursDecimal(total.totalNightMinutes)}
           unit="h"
           accent={total.totalNightMinutes > 0 ? "indigo" : "neutral"}
+        />
+        <StatTile
+          label="深夜＋残業（+25%加算）"
+          value={formatHoursDecimal(total.totalNightOvertimeMinutes)}
+          unit="h"
+          accent={total.totalNightOvertimeMinutes > 0 ? "indigo" : "neutral"}
         />
         <StatTile
           label="土日出勤"
@@ -233,7 +240,8 @@ export default async function HistoryPage({
       <div className="mb-4 rounded-[6px] border border-[var(--border-light)] bg-[var(--brand-50)]/50 px-3 py-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
         ※ 所定労働時間 {(viewUser.standard_work_minutes / 60).toFixed(2)}h（ユニポール標準: 9:15〜17:15・休憩45分）を基準に計算。
         「所定外」は所定超え〜法定8hまで（割増なし）、「法定外」は8h超（25%割増対象）。<br />
-        ※ 深夜・土日・法定休日の割増計算は社労士事務所が実施します。本画面は実績把握のみが目的です。
+        ※ 業務日は JST 04:00 を境界とします（23時出勤・翌2時退勤などの日跨ぎ勤務は出勤日に集約）。<br />
+        ※ 深夜（22:00〜5:00）+25%、深夜＋法定外残業 +50%、法定休日 +35% の最終的な割増賃金計算は社労士事務所で実施します。
         休憩欄の「自動」バッジは労基34条に基づく自動控除（6h超→45分、8h超→60分）が適用された日を示します。
       </div>
 

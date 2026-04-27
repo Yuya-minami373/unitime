@@ -1,6 +1,8 @@
 // 打刻データから日別/月次集計を計算するユーティリティ
 
-import { jstComponents, dayOfWeekFromYmd } from "./time";
+import { jstComponents, dayOfWeekFromYmd, businessDayFromIso } from "./time";
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 export type AttendanceRecord = {
   punch_type: string;
@@ -22,7 +24,8 @@ export type DaySummary = {
   workMinutes: number;
   scheduledOvertimeMinutes: number; // 所定超え〜法定8hまで（所定外・割増なし）
   overtimeMinutes: number;          // 法定外残業（>8h・25%割増対象）
-  nightMinutes: number;       // 深夜時間帯（22:00-5:00）の実働分
+  nightMinutes: number;       // 深夜時間帯（22:00-翌5:00）の実働分（日跨ぎ対応）
+  nightOvertimeMinutes: number; // 深夜帯と法定外残業帯の重なり（深夜+残業の50%対象）
   isWeekend: boolean;          // 土日判定
   holidayMinutes: number;      // 法定休日労働時間（MVPでは日曜のみ法定休日扱い）
   records: AttendanceRecord[];
@@ -37,19 +40,26 @@ function requiredBreakMinutes(grossMinutes: number): number {
   return 0;
 }
 
-// 22:00-5:00 と 労働時間帯の重なり（分）を計算
-// startMin/endMin は「その日0:00起点のminutes」。日跨ぎは考慮しない前提（MVP）
-function overlapWithNight(startMin: number, endMin: number): number {
-  // 深夜帯は [0, 5*60] と [22*60, 24*60] の2区間
-  const intervals: [number, number][] = [
-    [0, 5 * 60],
-    [22 * 60, 24 * 60],
-  ];
+// 区間 [startMs, endMs] と 各JST日の深夜帯[0:00-5:00] / [22:00-24:00] の重なり（分）
+// 絶対時刻ベースで日跨ぎ・複数日跨ぎに対応
+function nightOverlapMs(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0;
+  const startC = jstComponents(new Date(startMs));
+  const endC = jstComponents(new Date(endMs));
+  // JST 0:00 of YYYY-MM-DD = Date.UTC(Y, M-1, D) - JST_OFFSET_MS
+  const startMid = Date.UTC(startC.year, startC.month - 1, startC.day) - JST_OFFSET_MS;
+  const endMid = Date.UTC(endC.year, endC.month - 1, endC.day) - JST_OFFSET_MS;
+
   let total = 0;
-  for (const [ns, ne] of intervals) {
-    const s = Math.max(startMin, ns);
-    const e = Math.min(endMin, ne);
-    if (e > s) total += e - s;
+  for (let mid = startMid; mid <= endMid; mid += 86400000) {
+    // 早朝 00:00-05:00
+    const s1 = Math.max(startMs, mid);
+    const e1 = Math.min(endMs, mid + 5 * 3600000);
+    if (e1 > s1) total += (e1 - s1) / 60000;
+    // 夜 22:00-24:00
+    const s2 = Math.max(startMs, mid + 22 * 3600000);
+    const e2 = Math.min(endMs, mid + 24 * 3600000);
+    if (e2 > s2) total += (e2 - s2) / 60000;
   }
   return total;
 }
@@ -118,14 +128,19 @@ export function summarizeDay(
   const scheduledOvertimeMinutes = overStandard;
   const overtimeMinutes = overLegal;
 
-  // 深夜時間帯の実働分（休憩考慮せず、打刻の出退勤時間帯との重なりのみ）
+  // 深夜時間帯の実働分（絶対時刻ベース・日跨ぎ対応）
+  // 注: 休憩時間帯と深夜帯の重なりは控除していない（次フェーズで精緻化）
   let nightMinutes = 0;
+  let nightOvertimeMinutes = 0;
   if (clockIn && clockOut) {
-    const inMin = toMinutes(clockIn);
-    const outMin = toMinutes(clockOut);
-    // 日跨ぎしない前提（MVP）
-    if (outMin > inMin) {
-      nightMinutes = overlapWithNight(inMin, outMin);
+    const inMs = new Date(clockIn).getTime();
+    const outMs = new Date(clockOut).getTime();
+    nightMinutes = nightOverlapMs(inMs, outMs);
+    // 法定外残業帯（=退勤側からovertimeMinutes分）と深夜帯の重なり
+    // ※ 休憩を厳密に分けていないので近似。MVPとして妥当な精度
+    if (overtimeMinutes > 0) {
+      const overtimeStartMs = Math.max(inMs, outMs - overtimeMinutes * 60000);
+      nightOvertimeMinutes = nightOverlapMs(overtimeStartMs, outMs);
     }
   }
 
@@ -150,28 +165,29 @@ export function summarizeDay(
     scheduledOvertimeMinutes: Math.round(scheduledOvertimeMinutes),
     overtimeMinutes: Math.round(overtimeMinutes),
     nightMinutes: Math.round(nightMinutes),
+    nightOvertimeMinutes: Math.round(nightOvertimeMinutes),
     isWeekend,
     holidayMinutes,
     records: sorted,
   };
 }
 
-// 月次のレコードを日別にグループ化してサマリを返す
+// 月次のレコードを業務日別にグループ化してサマリを返す
+// 「業務日」は JST 04:00 を境界とする（time.ts businessDayFromIso 参照）
+// 当月の業務日 = 業務日が "YYYY-MM-DD" 形式で当月内に収まるもの
 export function summarizeMonth(
   year: number,
   month: number,
   records: AttendanceRecord[],
   standardWorkMinutes: number = 435,
 ): DaySummary[] {
-  // Date.UTCベースで月末日を算出（TZ非依存）
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const byDate = new Map<string, AttendanceRecord[]>();
 
-  // punched_at は "YYYY-MM-DDTHH:MM:SS.sss+09:00" 形式なので slice(0,10) はJST日付
   for (const r of records) {
-    const date = r.punched_at.slice(0, 10);
-    if (!byDate.has(date)) byDate.set(date, []);
-    byDate.get(date)!.push(r);
+    const businessDay = businessDayFromIso(r.punched_at);
+    if (!byDate.has(businessDay)) byDate.set(businessDay, []);
+    byDate.get(businessDay)!.push(r);
   }
 
   const result: DaySummary[] = [];
@@ -191,6 +207,7 @@ export type MonthTotal = {
   totalScheduledOvertimeMinutes: number; // 所定外・法定内（割増なし）
   totalOvertimeMinutes: number;          // 法定外残業（25%割増対象）
   totalNightMinutes: number;      // 深夜時間帯の実働分合計
+  totalNightOvertimeMinutes: number; // 深夜帯と法定外残業帯の重なり合計（+25%加算対象）
   weekendWorkDays: number;        // 土日出勤日数
   totalHolidayMinutes: number;    // 法定休日労働時間合計（日曜のみ）
 };
@@ -202,6 +219,7 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
   let totalScheduledOvertimeMinutes = 0;
   let totalOvertimeMinutes = 0;
   let totalNightMinutes = 0;
+  let totalNightOvertimeMinutes = 0;
   let weekendWorkDays = 0;
   let totalHolidayMinutes = 0;
 
@@ -212,6 +230,7 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
     totalScheduledOvertimeMinutes += s.scheduledOvertimeMinutes;
     totalOvertimeMinutes += s.overtimeMinutes;
     totalNightMinutes += s.nightMinutes;
+    totalNightOvertimeMinutes += s.nightOvertimeMinutes;
     if (s.isWeekend && s.workMinutes > 0) weekendWorkDays++;
     totalHolidayMinutes += s.holidayMinutes;
   }
@@ -223,6 +242,7 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
     totalScheduledOvertimeMinutes,
     totalOvertimeMinutes,
     totalNightMinutes,
+    totalNightOvertimeMinutes,
     weekendWorkDays,
     totalHolidayMinutes,
   };

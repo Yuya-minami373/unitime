@@ -17,6 +17,7 @@ import {
   jstComponents,
   dayOfWeekFromYmd,
   formatTime as formatJSTTime,
+  businessMonthRange,
 } from "@/lib/time";
 
 const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
@@ -59,12 +60,13 @@ export async function GET(req: Request) {
   const year = Number(yearStr);
   const month = Number(monthStr);
 
+  const monthRange = businessMonthRange(year, month);
   const records = await dbAll<AttendanceRecord>(
     `SELECT punch_type, punched_at
      FROM attendance_records
-     WHERE user_id = ? AND substr(punched_at, 1, 7) = ?
+     WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
      ORDER BY punched_at ASC`,
-    [user.id, ym],
+    [user.id, monthRange.startIso, monthRange.endIso],
   );
 
   const summaries = summarizeMonth(year, month, records, standardWorkMinutes);
@@ -115,6 +117,7 @@ export async function GET(req: Request) {
     "所定外",
     "法定外",
     "深夜",
+    "深夜残業",
     "法定休日",
   ];
   headers.forEach((h, i) => {
@@ -155,6 +158,7 @@ export async function GET(req: Request) {
       s.scheduledOvertimeMinutes > 0 ? formatMinutes(s.scheduledOvertimeMinutes) : "",
       s.overtimeMinutes > 0 ? formatMinutes(s.overtimeMinutes) : "",
       s.nightMinutes > 0 ? formatMinutes(s.nightMinutes) : "",
+      s.nightOvertimeMinutes > 0 ? formatMinutes(s.nightOvertimeMinutes) : "",
       s.holidayMinutes > 0 ? formatMinutes(s.holidayMinutes) : "",
     ];
 
@@ -188,9 +192,10 @@ export async function GET(req: Request) {
   sheet.getCell(totalRow, 7).value = formatMinutes(total.totalScheduledOvertimeMinutes);
   sheet.getCell(totalRow, 8).value = formatMinutes(total.totalOvertimeMinutes);
   sheet.getCell(totalRow, 9).value = formatMinutes(total.totalNightMinutes);
-  sheet.getCell(totalRow, 10).value = formatMinutes(total.totalHolidayMinutes);
+  sheet.getCell(totalRow, 10).value = formatMinutes(total.totalNightOvertimeMinutes);
+  sheet.getCell(totalRow, 11).value = formatMinutes(total.totalHolidayMinutes);
 
-  for (let c = 1; c <= 10; c++) {
+  for (let c = 1; c <= 11; c++) {
     const cell = sheet.getCell(totalRow, c);
     cell.font = { name: "Yu Gothic", size: 10, bold: true };
     cell.fill = {
@@ -223,9 +228,9 @@ export async function GET(req: Request) {
   // 注意書き
   const stdH = (standardWorkMinutes / 60).toFixed(2);
   const noteRow = summaryRow + 2;
-  sheet.mergeCells(noteRow, 1, noteRow, 10);
+  sheet.mergeCells(noteRow, 1, noteRow, 11);
   sheet.getCell(noteRow, 1).value =
-    `※ 所定労働時間=${stdH}h。所定外=所定超え〜法定8hまで（割増なし）、法定外=8h超（25%割増対象）。深夜は22:00-5:00、法定休日は日曜実働分（割増計算は社労士事務所で実施）`;
+    `※ 所定労働時間=${stdH}h。業務日は JST 04:00 境界（日跨ぎ勤務は出勤日に集約）。所定外=所定超え〜法定8hまで（割増なし）、法定外=8h超（25%割増対象）、深夜=22:00-5:00（25%）、深夜残業=深夜帯と法定外の重なり（+25%加算で50%）。最終的な割増賃金計算は社労士事務所で実施。`;
   sheet.getCell(noteRow, 1).font = { name: "Yu Gothic", size: 9, italic: true, color: { argb: "FF6B7280" } };
   sheet.getCell(noteRow, 1).alignment = { wrapText: true, vertical: "top" };
   sheet.getRow(noteRow).height = 32;
@@ -241,6 +246,7 @@ export async function GET(req: Request) {
     { width: 10 },  // 所定外
     { width: 10 },  // 法定外
     { width: 10 },  // 深夜
+    { width: 12 },  // 深夜残業
     { width: 12 },  // 法定休日
   ];
 

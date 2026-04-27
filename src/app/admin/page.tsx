@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { dbAll } from "@/lib/db";
-import { nowJST, jstComponents, formatTime } from "@/lib/time";
+import { nowJST, jstComponents, formatTime, nowBusinessDay, businessDayFromIso, businessMonthRange } from "@/lib/time";
 import AppShell from "@/components/AppShell";
 import {
   summarizeMonth,
@@ -82,9 +82,10 @@ export default async function AdminPage({
   const prevYm = `${prevDateUtc.getUTCFullYear()}-${String(prevDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
   const nextYm = `${nextDateUtc.getUTCFullYear()}-${String(nextDateUtc.getUTCMonth() + 1).padStart(2, "0")}`;
 
-  const today = nowJST().slice(0, 10);
+  const today = nowBusinessDay();
+  const monthRange = businessMonthRange(year, month);
 
-  // users / 全員分の月次打刻（1回で取得して後でuser_idでグループ化）/ 承認待ち精算 を並列取得
+  // users / 全員分の業務月打刻（1回で取得して後でuser_idでグループ化）/ 承認待ち精算 を並列取得
   const [users, allMonthRecords, pendingExpenses] = await Promise.all([
     dbAll<User>(
       `SELECT id, name, login_id, employment_type, standard_work_minutes,
@@ -96,10 +97,10 @@ export default async function AdminPage({
     dbAll<AttendanceRecord & { user_id: number }>(
       `SELECT user_id, punch_type, punched_at, latitude, longitude
        FROM attendance_records a
-       WHERE substr(punched_at, 1, 7) = ?
+       WHERE punched_at >= ? AND punched_at < ?
          AND user_id IN (SELECT id FROM users WHERE status = 'active' AND role != 'owner')
        ORDER BY punched_at ASC`,
-      [targetYm],
+      [monthRange.startIso, monthRange.endIso],
     ),
     listAllExpenses({ status: ["pending", "ai_flagged"] }),
   ]);
@@ -130,7 +131,7 @@ export default async function AdminPage({
     const total = calcMonthTotal(summaries);
 
     const todayRecords = records.filter(
-      (r) => r.punched_at.slice(0, 10) === today,
+      (r) => businessDayFromIso(r.punched_at) === today,
     );
     const status = currentWorkStatus(todayRecords);
     const todaySummary = summarizeDay(today, todayRecords, u.standard_work_minutes ?? 435);
