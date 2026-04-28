@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
-import { listSpecialPolicies } from "@/lib/leaves";
+import { listSpecialPolicies, calcBalanceForUser } from "@/lib/leaves";
 import { createLeaveRequest } from "../../actions";
 import { LeaveForm } from "./LeaveForm";
 
@@ -12,7 +12,10 @@ export default async function NewLeavePage() {
   if (!user) redirect("/login");
   if (user.employment_type === "crew") redirect("/");
 
-  const policies = await listSpecialPolicies();
+  const [policies, balances] = await Promise.all([
+    listSpecialPolicies(),
+    calcBalanceForUser(user.id),
+  ]);
 
   return (
     <AppShell
@@ -36,7 +39,11 @@ export default async function NewLeavePage() {
 
       <section className="u-card overflow-hidden">
         <div className="p-4 md:p-5">
-          <LeaveForm policies={policies} action={createLeaveRequest} />
+          <LeaveForm
+            policies={policies}
+            balances={{ paid: balances.paid, special: balances.special }}
+            action={createLeaveRequest}
+          />
         </div>
       </section>
     </AppShell>

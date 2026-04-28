@@ -6,7 +6,9 @@ import {
   DURATION_TYPES,
   LEAVE_TYPES,
   hoursFromTimeRange,
+  formatDays,
   type SpecialLeavePolicy,
+  type LeaveBalance,
 } from "@/lib/leaves";
 
 type Action = (formData: FormData) => void | Promise<void>;
@@ -27,9 +29,11 @@ const HOUR_OPTIONS = [
 
 export function LeaveForm({
   policies,
+  balances,
   action,
 }: {
   policies: SpecialLeavePolicy[];
+  balances: { paid?: LeaveBalance; special?: LeaveBalance };
   action: Action;
 }) {
   const [leaveType, setLeaveType] = useState("paid");
@@ -68,8 +72,39 @@ export function LeaveForm({
       : `${computedHours.toFixed(1)}時間`
     : null;
 
+  const currentBalance =
+    leaveType === "paid"
+      ? balances.paid
+      : leaveType === "special"
+        ? balances.special
+        : null;
+
+  // 日付inputをクリック/フォーカスしたらカレンダーを開く
+  function openDatePicker(
+    e: React.SyntheticEvent<HTMLInputElement>,
+  ) {
+    const el = e.currentTarget;
+    if (typeof el.showPicker === "function") {
+      try {
+        el.showPicker();
+      } catch {
+        // ユーザー操作起因でない場合に投げる例外は無視
+      }
+    }
+  }
+
   return (
     <form action={action} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {currentBalance ? (
+        <BalanceBanner
+          title={leaveType === "paid" ? "年次有給休暇" : "特別休暇"}
+          balance={currentBalance}
+        />
+      ) : (
+        <div className="md:col-span-2 rounded-md border border-[var(--border-default)] bg-[var(--surface-subtle)] px-3 py-2 text-[12px] text-[var(--text-tertiary)]">
+          {leaveTypeShortLabel(leaveType)}は残日数管理の対象外です（実日数で記録）。
+        </div>
+      )}
       <Field label="休暇種別" required>
         <select
           name="leave_type"
@@ -122,7 +157,9 @@ export function LeaveForm({
           required
           value={startDate}
           onChange={(e) => handleStartChange(e.target.value)}
-          className="u-input"
+          onClick={openDatePicker}
+          onFocus={openDatePicker}
+          className="u-input cursor-pointer"
         />
       </Field>
 
@@ -137,8 +174,10 @@ export function LeaveForm({
           required
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
+          onClick={openDatePicker}
+          onFocus={openDatePicker}
           disabled={isHourly}
-          className="u-input disabled:opacity-50"
+          className="u-input cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </Field>
 
@@ -219,6 +258,54 @@ export function LeaveForm({
       </div>
     </form>
   );
+}
+
+function BalanceBanner({
+  title,
+  balance,
+}: {
+  title: string;
+  balance: LeaveBalance;
+}) {
+  const expired = balance.expired_days ?? 0;
+  return (
+    <div className="md:col-span-2 rounded-md border border-[var(--border-brand)] bg-[var(--brand-50)] px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[12px] font-medium text-[var(--text-secondary)]">
+          {title} 残日数
+        </span>
+        <span className="text-[20px] font-semibold tabular-nums tracking-tight">
+          {formatDays(balance.remaining_days)}
+        </span>
+      </div>
+      <div className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+        付与累計 {formatDays(balance.granted_days)} ・ 使用 {formatDays(balance.used_days)}
+        {balance.pending_days > 0 && (
+          <span className="ml-1 text-amber-700">
+            ・ 申請中 {formatDays(balance.pending_days)}
+          </span>
+        )}
+        {expired > 0 && (
+          <span className="ml-1 text-rose-600">
+            ・ 期限切れ {formatDays(expired)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function leaveTypeShortLabel(type: string): string {
+  switch (type) {
+    case "compensatory":
+      return "代休";
+    case "substitute":
+      return "振替休日";
+    case "unpaid":
+      return "無給休暇";
+    default:
+      return "この休暇";
+  }
 }
 
 function Field({
