@@ -146,8 +146,10 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   special_policy_code TEXT,         -- type='special'のみ
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
-  duration_type TEXT NOT NULL,      -- 'full' / 'half_am' / 'half_pm' / 'hourly'
-  hours_used REAL,                  -- 'hourly'のみ
+  duration_type TEXT NOT NULL,      -- 'full' / 'hourly' （旧 'half_am'/'half_pm' は履歴のみ表示用に残す）
+  hours_used REAL,                  -- 'hourly'のみ。start_time/end_timeから自動算出
+  start_time TEXT,                  -- 'hourly'のみ HH:MM
+  end_time TEXT,                    -- 'hourly'のみ HH:MM
   reason TEXT,
   status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' / 'approved' / 'rejected' / 'cancelled'
   approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

@@ -10,6 +10,7 @@ import {
   type LeaveType,
   LEAVE_TYPES,
   DURATION_TYPES,
+  hoursFromTimeRange,
 } from "@/lib/leaves";
 
 const VALID_LEAVE_TYPES = LEAVE_TYPES.map((t) => t.value);
@@ -32,7 +33,8 @@ function enumerateDatesJST(start: string, end: string): string[] {
   return result;
 }
 
-// 1日あたり控除分: 全休=480 / 半休=240 / 時間休=hours*60
+// 1日あたり控除分: 全休=480 / 時間休=hours*60
+// 過去データ互換: half_am/half_pm=240
 function leaveMinutesPerDay(
   duration_type: string,
   hours_used: number | null,
@@ -91,8 +93,8 @@ export async function createLeaveRequest(formData: FormData) {
   const duration_type = String(formData.get("duration_type") ?? "");
   const start_date = String(formData.get("start_date") ?? "").trim();
   const end_date = String(formData.get("end_date") ?? "").trim() || start_date;
-  const hours_used_raw = String(formData.get("hours_used") ?? "").trim();
-  const hours_used = hours_used_raw ? Number(hours_used_raw) : null;
+  const start_time = String(formData.get("start_time") ?? "").trim() || null;
+  const end_time = String(formData.get("end_time") ?? "").trim() || null;
   const reason = String(formData.get("reason") ?? "").trim() || null;
   const special_policy_code =
     String(formData.get("special_policy_code") ?? "").trim() || null;
@@ -104,18 +106,24 @@ export async function createLeaveRequest(formData: FormData) {
     redirect("/requests?tab=leave&error=invalid_duration");
   }
   if (!start_date) redirect("/requests?tab=leave&error=date_required");
-  if (duration_type === "hourly" && (!hours_used || hours_used <= 0)) {
-    redirect("/requests?tab=leave&error=hours_required");
+
+  // 時間休: 開始/終了時刻必須・end > start・hours_used を自動算出
+  let hours_used: number | null = null;
+  if (duration_type === "hourly") {
+    if (!start_time || !end_time) {
+      redirect("/requests?tab=leave&error=time_required");
+    }
+    const computed = hoursFromTimeRange(start_time, end_time);
+    if (computed <= 0) {
+      redirect("/requests?tab=leave&error=time_invalid");
+    }
+    hours_used = computed;
+    // 時間休は単日のみ
+    if (end_date !== start_date) {
+      redirect("/requests?tab=leave&error=single_day_only");
+    }
   }
-  // 半休/時間休は単日のみ
-  if (
-    (duration_type === "half_am" ||
-      duration_type === "half_pm" ||
-      duration_type === "hourly") &&
-    end_date !== start_date
-  ) {
-    redirect("/requests?tab=leave&error=single_day_only");
-  }
+
   if (leave_type === "special" && !special_policy_code) {
     redirect("/requests?tab=leave&error=policy_required");
   }
@@ -124,8 +132,9 @@ export async function createLeaveRequest(formData: FormData) {
     const result = await dbRun(
       `INSERT INTO leave_requests
          (user_id, leave_type, special_policy_code, start_date, end_date,
-          duration_type, hours_used, reason, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+          duration_type, hours_used, start_time, end_time,
+          reason, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
       [
         user.id,
         leave_type,
@@ -133,7 +142,9 @@ export async function createLeaveRequest(formData: FormData) {
         start_date,
         end_date,
         duration_type,
-        duration_type === "hourly" ? hours_used : null,
+        hours_used,
+        duration_type === "hourly" ? start_time : null,
+        duration_type === "hourly" ? end_time : null,
         reason,
         nowJST(),
         nowJST(),

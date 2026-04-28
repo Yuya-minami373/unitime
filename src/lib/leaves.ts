@@ -14,14 +14,19 @@ export const LEAVE_TYPES = [
 
 export type LeaveType = (typeof LEAVE_TYPES)[number]["value"];
 
+// 新規申請で選択可能な区分
 export const DURATION_TYPES = [
   { value: "full", label: "終日" },
-  { value: "half_am", label: "午前半休（9:15〜13:15）" },
-  { value: "half_pm", label: "午後半休（13:15〜17:15）" },
   { value: "hourly", label: "時間休" },
 ] as const;
 
 export type DurationType = (typeof DURATION_TYPES)[number]["value"];
+
+// 表示専用ラベル（過去の half_am / half_pm レコードの互換表示用）
+const LEGACY_DURATION_LABELS: Record<string, string> = {
+  half_am: "午前半休",
+  half_pm: "午後半休",
+};
 
 export const STATUS_LABEL: Record<string, string> = {
   pending: "承認待ち",
@@ -39,6 +44,8 @@ export type LeaveRequest = {
   end_date: string;
   duration_type: DurationType;
   hours_used: number | null;
+  start_time: string | null;
+  end_time: string | null;
   reason: string | null;
   status: string;
   approver_id: number | null;
@@ -70,10 +77,11 @@ export type SpecialLeavePolicy = {
 
 // 申請1件の消費日数を計算
 // 暦日カウント（土日含む）。MVP簡略化、運用で土日を含む申請は分割推奨
+// 過去データ互換: half_am/half_pm は 0.5日換算
 export function requestToDays(req: {
   start_date: string;
   end_date: string;
-  duration_type: DurationType;
+  duration_type: string;
   hours_used: number | null;
 }): number {
   if (req.duration_type === "half_am" || req.duration_type === "half_pm") {
@@ -87,6 +95,21 @@ export function requestToDays(req: {
   const endMs = Date.parse(`${req.end_date}T00:00:00+09:00`);
   if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return 0;
   return Math.round((endMs - startMs) / 86400000) + 1;
+}
+
+// HH:MM × 2 から時間数を返す。end <= start や不正値は 0 を返す
+export function hoursFromTimeRange(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): number {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return 0;
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  if (endMin <= startMin) return 0;
+  return (endMin - startMin) / 60;
 }
 
 // 残日数集計（leave_type 別）
@@ -278,7 +301,8 @@ export function leaveTypeLabel(type: string): string {
 
 export function durationTypeLabel(type: string): string {
   const found = DURATION_TYPES.find((t) => t.value === type);
-  return found?.label ?? type;
+  if (found) return found.label;
+  return LEGACY_DURATION_LABELS[type] ?? type;
 }
 
 export function formatDays(days: number): string {

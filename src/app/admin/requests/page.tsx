@@ -376,6 +376,7 @@ async function LeaveAdminPanel({
     dbAll<LeaveRequestWithUser>(
       `SELECT lr.id, lr.user_id, lr.leave_type, lr.special_policy_code,
               lr.start_date, lr.end_date, lr.duration_type, lr.hours_used,
+              lr.start_time, lr.end_time,
               lr.reason, lr.status, lr.approver_id, lr.approved_at,
               lr.rejection_reason, lr.created_at,
               u.name as user_name, NULL as approver_name
@@ -388,6 +389,7 @@ async function LeaveAdminPanel({
     dbAll<LeaveRequestWithUser>(
       `SELECT lr.id, lr.user_id, lr.leave_type, lr.special_policy_code,
               lr.start_date, lr.end_date, lr.duration_type, lr.hours_used,
+              lr.start_time, lr.end_time,
               lr.reason, lr.status, lr.approver_id, lr.approved_at,
               lr.rejection_reason, lr.created_at,
               u.name as user_name, ap.name as approver_name
@@ -513,7 +515,13 @@ function PendingLeaveCard({
             </span>
             <span className="text-[12px] text-[var(--text-tertiary)]">
               {durationTypeLabel(req.duration_type)}
-              {req.duration_type === "hourly" && req.hours_used && (
+              {req.duration_type === "hourly" && req.start_time && req.end_time && (
+                <span className="ml-1 tabular-nums">
+                  {req.start_time}〜{req.end_time}
+                  {req.hours_used ? `（${req.hours_used}h）` : null}
+                </span>
+              )}
+              {req.duration_type === "hourly" && !req.start_time && req.hours_used && (
                 <span className="ml-1 tabular-nums">{req.hours_used}h</span>
               )}
             </span>
@@ -590,7 +598,12 @@ function LeaveHistoryTable({
                   </td>
                   <td className="px-3 py-2.5 align-top text-[11px]">
                     {durationTypeLabel(r.duration_type)}
-                    {r.duration_type === "hourly" && r.hours_used && (
+                    {r.duration_type === "hourly" && r.start_time && r.end_time && (
+                      <span className="ml-1 tabular-nums text-[var(--text-tertiary)]">
+                        {r.start_time}〜{r.end_time}
+                      </span>
+                    )}
+                    {r.duration_type === "hourly" && !r.start_time && r.hours_used && (
                       <span className="ml-1 tabular-nums">{r.hours_used}h</span>
                     )}
                   </td>

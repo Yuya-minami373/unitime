@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import {
   DURATION_TYPES,
   LEAVE_TYPES,
+  hoursFromTimeRange,
   type SpecialLeavePolicy,
 } from "@/lib/leaves";
 
@@ -21,26 +22,37 @@ export function LeaveForm({
   const [durationType, setDurationType] = useState("full");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
 
   const isSpecial = leaveType === "special";
   const isHourly = durationType === "hourly";
-  const isHalf = durationType === "half_am" || durationType === "half_pm";
-  const isSingleDayOnly = isHourly || isHalf;
 
-  // 半休/時間休は単日のみ → start_date を end_date にも反映
+  // 時間休は単日のみ → start_date を end_date にも反映
   function handleStartChange(value: string) {
     setStartDate(value);
-    if (isSingleDayOnly || !endDate || endDate < value) {
+    if (isHourly || !endDate || endDate < value) {
       setEndDate(value);
     }
   }
 
   function handleDurationChange(value: string) {
     setDurationType(value);
-    if (value === "hourly" || value === "half_am" || value === "half_pm") {
+    if (value === "hourly") {
       setEndDate(startDate);
+    } else {
+      // 終日に戻したら時刻はクリア
+      setStartTime("");
+      setEndTime("");
     }
   }
+
+  const computedHours = isHourly ? hoursFromTimeRange(startTime, endTime) : 0;
+  const hoursLabel = computedHours > 0
+    ? Number.isInteger(computedHours)
+      ? `${computedHours}時間`
+      : `${computedHours.toFixed(1)}時間`
+    : null;
 
   return (
     <form action={action} className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -89,20 +101,6 @@ export function LeaveForm({
         </select>
       </Field>
 
-      {isHourly && (
-        <Field label="時間数（h）" required hint="1時間単位推奨。8h=1日換算">
-          <input
-            name="hours_used"
-            type="number"
-            min="0.5"
-            step="0.5"
-            required
-            className="u-input"
-            placeholder="例: 2"
-          />
-        </Field>
-      )}
-
       <Field label="開始日" required>
         <input
           name="start_date"
@@ -117,7 +115,7 @@ export function LeaveForm({
       <Field
         label="終了日"
         required
-        hint={isSingleDayOnly ? "半休/時間休は単日のみ" : "終日休のみ複数日可"}
+        hint={isHourly ? "時間休は単日のみ" : "終日休のみ複数日可"}
       >
         <input
           name="end_date"
@@ -125,10 +123,55 @@ export function LeaveForm({
           required
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          disabled={isSingleDayOnly}
+          disabled={isHourly}
           className="u-input disabled:opacity-50"
         />
       </Field>
+
+      {isHourly && (
+        <>
+          <Field label="開始時刻" required hint="1時間単位">
+            <input
+              name="start_time"
+              type="time"
+              step={3600}
+              required
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="u-input"
+            />
+          </Field>
+
+          <Field label="終了時刻" required hint="開始より後">
+            <input
+              name="end_time"
+              type="time"
+              step={3600}
+              required
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="u-input"
+            />
+          </Field>
+
+          <div className="md:col-span-2">
+            <div className="rounded-md border border-[var(--border-default)] bg-[var(--surface-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+              {hoursLabel ? (
+                <>
+                  消化時間: <span className="font-semibold text-[var(--text-primary)]">{hoursLabel}</span>
+                  <span className="ml-2 text-[11px] text-[var(--text-tertiary)]">
+                    （8時間=1日換算）
+                  </span>
+                </>
+              ) : (
+                <span className="text-[var(--text-tertiary)]">
+                  開始時刻と終了時刻を入力してください
+                </span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="md:col-span-2">
         <Field label="理由・備考" hint="承認者に共有する情報">

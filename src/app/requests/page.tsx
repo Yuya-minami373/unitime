@@ -278,7 +278,8 @@ async function LeavePanel({
     calcBalanceForUser(userId),
     dbAll<LeaveRequest>(
       `SELECT id, user_id, leave_type, special_policy_code, start_date, end_date,
-              duration_type, hours_used, reason, status, approver_id, approved_at,
+              duration_type, hours_used, start_time, end_time,
+              reason, status, approver_id, approved_at,
               rejection_reason, created_at
        FROM leave_requests
        WHERE user_id = ?
@@ -388,7 +389,13 @@ async function LeavePanel({
                       </td>
                       <td className="px-3 py-2.5 align-top text-[11px]">
                         {durationTypeLabel(r.duration_type)}
-                        {r.duration_type === "hourly" && r.hours_used && (
+                        {r.duration_type === "hourly" && r.start_time && r.end_time && (
+                          <span className="ml-1 tabular-nums text-[var(--text-tertiary)]">
+                            {r.start_time}〜{r.end_time}
+                            {r.hours_used ? `（${r.hours_used}h）` : null}
+                          </span>
+                        )}
+                        {r.duration_type === "hourly" && !r.start_time && r.hours_used && (
                           <span className="ml-1 tabular-nums">
                             {r.hours_used}h
                           </span>
@@ -667,8 +674,12 @@ function errorMessage(code: string): string {
       return "開始日を入力してください。";
     case "hours_required":
       return "時間休の時間数を入力してください。";
+    case "time_required":
+      return "時間休の開始時刻と終了時刻を入力してください。";
+    case "time_invalid":
+      return "終了時刻は開始時刻より後に設定してください。";
     case "single_day_only":
-      return "半休・時間休は単日のみです。";
+      return "時間休は単日のみです。";
     case "policy_required":
       return "特別休暇の事由を選択してください。";
     case "not_found":
