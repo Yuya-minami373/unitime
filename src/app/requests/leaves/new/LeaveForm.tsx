@@ -269,28 +269,65 @@ function BalanceBanner({
   balance: LeaveBalance;
 }) {
   const expired = balance.expired_days ?? 0;
+  const hasNote = balance.pending_days > 0 || expired > 0;
   return (
     <div className="md:col-span-2 rounded-md border border-[var(--border-brand)] bg-[var(--brand-50)] px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px] font-medium text-[var(--text-secondary)]">
-          {title} 残日数
-        </span>
-        <span className="text-[20px] font-semibold tabular-nums tracking-tight">
-          {formatDays(balance.remaining_days)}
-        </span>
+      <div className="mb-2 text-[11px] font-medium text-[var(--text-secondary)]">
+        {title}
       </div>
-      <div className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
-        付与累計 {formatDays(balance.granted_days)} ・ 使用 {formatDays(balance.used_days)}
-        {balance.pending_days > 0 && (
-          <span className="ml-1 text-amber-700">
-            ・ 申請中 {formatDays(balance.pending_days)}
-          </span>
-        )}
-        {expired > 0 && (
-          <span className="ml-1 text-rose-600">
-            ・ 期限切れ {formatDays(expired)}
-          </span>
-        )}
+      <div className="grid grid-cols-3 divide-x divide-[var(--border-brand)] text-center">
+        <BalanceMetric
+          label="残日数"
+          value={formatDays(balance.remaining_days)}
+          emphasis
+        />
+        <BalanceMetric
+          label="付与累計"
+          value={formatDays(balance.granted_days)}
+        />
+        <BalanceMetric
+          label="使用"
+          value={formatDays(balance.used_days)}
+        />
+      </div>
+      {hasNote && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums">
+          {balance.pending_days > 0 && (
+            <span className="text-amber-700">
+              申請中 {formatDays(balance.pending_days)}
+            </span>
+          )}
+          {expired > 0 && (
+            <span className="text-rose-600">
+              期限切れ {formatDays(expired)}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BalanceMetric({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="px-2">
+      <div className="text-[10px] text-[var(--text-tertiary)]">{label}</div>
+      <div
+        className={
+          emphasis
+            ? "mt-0.5 text-[20px] font-semibold tabular-nums tracking-tight text-[var(--text-primary)]"
+            : "mt-0.5 text-[14px] font-medium tabular-nums text-[var(--text-secondary)]"
+        }
+      >
+        {value}
       </div>
     </div>
   );
