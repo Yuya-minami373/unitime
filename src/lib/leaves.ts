@@ -75,6 +75,12 @@ export type SpecialLeavePolicy = {
   display_order: number;
 };
 
+// 所定実働 = 7h = 420分（休憩12:00-13:00を控除した実働時間）
+export const STANDARD_WORK_MINUTES_PER_DAY = 420;
+// 休憩時間帯（分単位）: 12:00-13:00
+const BREAK_START_MIN = 12 * 60;
+const BREAK_END_MIN = 13 * 60;
+
 // 申請1件の消費日数を計算
 // 暦日カウント（土日含む）。MVP簡略化、運用で土日を含む申請は分割推奨
 // 過去データ互換: half_am/half_pm は 0.5日換算
@@ -88,7 +94,8 @@ export function requestToDays(req: {
     return 0.5;
   }
   if (req.duration_type === "hourly") {
-    return Math.max(0, (req.hours_used ?? 0) / 8);
+    // 所定7h=1日換算
+    return Math.max(0, (req.hours_used ?? 0) / (STANDARD_WORK_MINUTES_PER_DAY / 60));
   }
   // full: 期間日数
   const startMs = Date.parse(`${req.start_date}T00:00:00+09:00`);
@@ -97,19 +104,30 @@ export function requestToDays(req: {
   return Math.round((endMs - startMs) / 86400000) + 1;
 }
 
-// HH:MM × 2 から時間数を返す。end <= start や不正値は 0 を返す
+// HH:MM 文字列を 0時起点の分に変換。不正値は null
+function parseHHMM(s: string): number | null {
+  const [h, m] = s.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+// HH:MM × 2 から「休憩(12:00-13:00)を控除した実働時間（時）」を返す
+// end <= start や不正値は 0 を返す
 export function hoursFromTimeRange(
   start: string | null | undefined,
   end: string | null | undefined,
 ): number {
   if (!start || !end) return 0;
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return 0;
-  const startMin = sh * 60 + sm;
-  const endMin = eh * 60 + em;
-  if (endMin <= startMin) return 0;
-  return (endMin - startMin) / 60;
+  const startMin = parseHHMM(start);
+  const endMin = parseHHMM(end);
+  if (startMin === null || endMin === null || endMin <= startMin) return 0;
+  // 休憩時間帯との重複分を控除
+  const overlap = Math.max(
+    0,
+    Math.min(endMin, BREAK_END_MIN) - Math.max(startMin, BREAK_START_MIN),
+  );
+  const workMin = endMin - startMin - overlap;
+  return Math.max(0, workMin / 60);
 }
 
 // 残日数集計（leave_type 別）

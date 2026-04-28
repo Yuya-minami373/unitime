@@ -11,16 +11,17 @@ import {
 
 type Action = (formData: FormData) => void | Promise<void>;
 
-// 所定労働時間 9:15-17:15 に揃えて 1時間刻み・分は :15 固定
+// 所定 9:15-17:15 / 休憩 12:00-13:00。始業・終業は :15、それ以外は毎時 :00
 const HOUR_OPTIONS = [
   "9:15",
-  "10:15",
-  "11:15",
-  "12:15",
-  "13:15",
-  "14:15",
-  "15:15",
-  "16:15",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
   "17:15",
 ];
 
@@ -183,7 +184,7 @@ export function LeaveForm({
                 <>
                   消化時間: <span className="font-semibold text-[var(--text-primary)]">{hoursLabel}</span>
                   <span className="ml-2 text-[11px] text-[var(--text-tertiary)]">
-                    （8時間=1日換算）
+                    （休憩12:00-13:00控除済 / 7時間=1日換算）
                   </span>
                 </>
               ) : (

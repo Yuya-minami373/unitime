@@ -33,16 +33,18 @@ function enumerateDatesJST(start: string, end: string): string[] {
   return result;
 }
 
-// 1日あたり控除分: 全休=480 / 時間休=hours*60
-// 過去データ互換: half_am/half_pm=240
+// 1日あたり控除分（実労働分・休憩控除済み）
+// 全休=420（所定実働7h）
+// 時間休=hours_used*60（hours_used は既に hoursFromTimeRange で休憩控除済み）
+// 過去データ互換: half_am/half_pm=210（所定の半分）
 function leaveMinutesPerDay(
   duration_type: string,
   hours_used: number | null,
 ): number {
-  if (duration_type === "half_am" || duration_type === "half_pm") return 240;
+  if (duration_type === "half_am" || duration_type === "half_pm") return 210;
   if (duration_type === "hourly")
     return Math.max(0, Math.round((hours_used ?? 0) * 60));
-  return 480;
+  return 420;
 }
 
 // 承認された申請から attendance_records へ leave 行を作成
