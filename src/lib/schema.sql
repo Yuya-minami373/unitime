@@ -92,6 +92,67 @@ CREATE INDEX IF NOT EXISTS idx_expense_claims_user ON expense_claims(user_id);
 CREATE INDEX IF NOT EXISTS idx_expense_claims_status ON expense_claims(status);
 CREATE INDEX IF NOT EXISTS idx_expense_claims_claim_date ON expense_claims(claim_date);
 
+-- ===== Phase B #2-A: 休暇申請ワークフロー =====
+-- 残日数 = SUM(leave_grants.granted_days) - SUM(approved leave_requests in days)
+-- 年度概念は granted_at の年（YYYY-）でアプリ側集計
+
+CREATE TABLE IF NOT EXISTS special_leave_policies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  default_days REAL NOT NULL,
+  description TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+
+INSERT OR IGNORE INTO special_leave_policies (code, name, default_days, description, display_order) VALUES
+  ('marriage', '結婚休暇', 5, '本人の結婚時に付与', 1),
+  ('funeral_1st', '忌引（1親等）', 5, '父母・配偶者・子の忌引', 2),
+  ('funeral_2nd', '忌引（2親等）', 3, '祖父母・兄弟姉妹・配偶者の父母', 3),
+  ('funeral_3rd', '忌引（3親等）', 1, 'おじ・おば・甥姪・配偶者の祖父母兄弟', 4),
+  ('birth', '配偶者出産休暇', 3, '配偶者の出産時', 5),
+  ('jury', '裁判員・公務', 0, '実日数。0=実日数（申請時に日数指定）', 6),
+  ('disaster', '災害特別休暇', 0, '実日数（申請時に日数指定）', 7);
+
+-- 付与履歴: 有給は法定通り auto / 特別は申請時 manual
+CREATE TABLE IF NOT EXISTS leave_grants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  leave_type TEXT NOT NULL,         -- 'paid' / 'special'
+  special_policy_code TEXT,         -- type='special'のみ。policies.codeへの論理参照
+  granted_days REAL NOT NULL,
+  granted_at TEXT NOT NULL,         -- YYYY-MM-DD
+  source TEXT NOT NULL DEFAULT 'manual',  -- 'auto' / 'manual'
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_leave_grants_user ON leave_grants(user_id);
+CREATE INDEX IF NOT EXISTS idx_leave_grants_at ON leave_grants(granted_at);
+
+-- 申請履歴
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  leave_type TEXT NOT NULL,         -- 'paid' / 'special' / 'compensatory' / 'substitute' / 'unpaid'
+  special_policy_code TEXT,         -- type='special'のみ
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  duration_type TEXT NOT NULL,      -- 'full' / 'half_am' / 'half_pm' / 'hourly'
+  hours_used REAL,                  -- 'hourly'のみ
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' / 'approved' / 'rejected' / 'cancelled'
+  approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  approved_at TEXT,
+  rejection_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_user ON leave_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_approver ON leave_requests(approver_id);
+
 -- ===== Phase 3a: クルー管理機能（2026-04-26 要件定義） =====
 -- 詳細: docs/phase3a_requirements.md
 

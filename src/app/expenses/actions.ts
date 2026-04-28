@@ -182,7 +182,7 @@ export async function createExpenseAction(formData: FormData): Promise<CreateExp
     }
   })();
 
-  revalidatePath("/expenses");
+  revalidatePath("/requests");
   return { ok: true, id };
 }
 
@@ -192,7 +192,7 @@ export async function createExpenseAndRedirect(formData: FormData): Promise<void
     // エラー時はクエリで戻す
     redirect(`/expenses/new?error=${encodeURIComponent(res.error)}`);
   }
-  redirect(`/expenses?new=${res.id}`);
+  redirect(`/requests?tab=expense&new=${res.id}`);
 }
 
 export type ApproveResult = { ok: true } | { ok: false; error: string };
@@ -218,8 +218,8 @@ export async function approveExpenseAction(id: number): Promise<ApproveResult> {
     category: claim.category,
   }).catch((err) => console.error("[expense] approve notify failed:", err));
 
-  revalidatePath("/admin/expenses");
-  revalidatePath("/expenses");
+  revalidatePath("/admin/requests");
+  revalidatePath("/requests");
   return { ok: true };
 }
 
@@ -252,7 +252,7 @@ export async function rejectExpenseAction(
     reason: trimmed,
   }).catch((err) => console.error("[expense] reject notify failed:", err));
 
-  revalidatePath("/admin/expenses");
-  revalidatePath("/expenses");
+  revalidatePath("/admin/requests");
+  revalidatePath("/requests");
   return { ok: true };
 }

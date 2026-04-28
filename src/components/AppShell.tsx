@@ -33,11 +33,11 @@ const baseMemberNav: NavItem[] = [
   { href: "/history", label: "勤怠履歴", icon: History },
 ];
 
-const expenseNavItem: NavItem = { href: "/expenses", label: "立替精算", icon: Receipt };
+const requestNavItem: NavItem = { href: "/requests", label: "各種申請", icon: Receipt };
 
 const teamNav: NavItem[] = [
   { href: "/admin", label: "チーム", icon: Users },
-  { href: "/admin/expenses", label: "精算承認", icon: Receipt },
+  { href: "/admin/requests", label: "各種申請", icon: Receipt },
 ];
 
 const crewMgmtNav: NavItem[] = [
@@ -53,11 +53,11 @@ const ownerNav: NavItem[] = [
 ];
 
 // role + 雇用形態で表示するナビをグループ単位で組み立てる
-// クルー（crew）は打刻のみ。立替精算メニューは非表示
+// クルー（crew）は打刻のみ。各種申請メニューは非表示
 // 社員（employment=employee）には「クルー管理」セクションも表示
 function navFor(role: string, employment?: string): NavGroup[] {
   const memberItems =
-    employment === "crew" ? baseMemberNav : [...baseMemberNav, expenseNavItem];
+    employment === "crew" ? baseMemberNav : [...baseMemberNav, requestNavItem];
 
   if (role === "owner") {
     return [
