@@ -9,6 +9,9 @@ export type AttendanceRecord = {
   punched_at: string;
   latitude?: number | null;
   longitude?: number | null;
+  // Phase B #2-B: 休暇承認による自動生成行
+  kind?: string | null;       // 'work' | 'leave' （未指定なら 'work' 扱い）
+  leave_minutes?: number | null;
 };
 
 export type DaySummary = {
@@ -28,6 +31,9 @@ export type DaySummary = {
   nightOvertimeMinutes: number; // 深夜帯と法定外残業帯の重なり（深夜+残業の50%対象）
   isWeekend: boolean;          // 土日判定
   holidayMinutes: number;      // 法定休日労働時間（MVPでは日曜のみ法定休日扱い）
+  // Phase B #2-B: 休暇情報
+  leaveMinutes: number;        // 承認済休暇の控除分（全休=480 / 半休=240 / 時間休=hours*60）
+  leaveDays: number;           // 0 / 0.5 / 1 / 0〜1 (時間休の按分)
   records: AttendanceRecord[];
 };
 
@@ -84,6 +90,14 @@ export function summarizeDay(
   const sorted = [...records].sort((a, b) =>
     a.punched_at < b.punched_at ? -1 : 1,
   );
+
+  // 休暇行を分離して別集計（kindが無い既存データはwork扱い）
+  const leaveRows = sorted.filter((r) => r.kind === "leave");
+  const leaveMinutesTotal = leaveRows.reduce(
+    (sum, r) => sum + (r.leave_minutes ?? 0),
+    0,
+  );
+  const leaveDays = leaveMinutesTotal / 480; // 8h=1日換算
 
   const clockInRec = sorted.find((r) => r.punch_type === "clock_in");
   const clockOutRecords = sorted.filter((r) => r.punch_type === "clock_out");
@@ -168,6 +182,8 @@ export function summarizeDay(
     nightOvertimeMinutes: Math.round(nightOvertimeMinutes),
     isWeekend,
     holidayMinutes,
+    leaveMinutes: Math.round(leaveMinutesTotal),
+    leaveDays: Math.round(leaveDays * 100) / 100,
     records: sorted,
   };
 }
@@ -210,6 +226,8 @@ export type MonthTotal = {
   totalNightOvertimeMinutes: number; // 深夜帯と法定外残業帯の重なり合計（+25%加算対象）
   weekendWorkDays: number;        // 土日出勤日数
   totalHolidayMinutes: number;    // 法定休日労働時間合計（日曜のみ）
+  totalLeaveDays: number;         // 当月の休暇消化日数（半休=0.5 / 時間休=hours/8）
+  totalLeaveMinutes: number;      // 控除分の合計（参考値）
 };
 
 export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
@@ -222,6 +240,8 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
   let totalNightOvertimeMinutes = 0;
   let weekendWorkDays = 0;
   let totalHolidayMinutes = 0;
+  let totalLeaveDays = 0;
+  let totalLeaveMinutes = 0;
 
   for (const s of summaries) {
     if (s.workMinutes > 0) workDays++;
@@ -233,6 +253,8 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
     totalNightOvertimeMinutes += s.nightOvertimeMinutes;
     if (s.isWeekend && s.workMinutes > 0) weekendWorkDays++;
     totalHolidayMinutes += s.holidayMinutes;
+    totalLeaveDays += s.leaveDays;
+    totalLeaveMinutes += s.leaveMinutes;
   }
 
   return {
@@ -245,6 +267,8 @@ export function calcMonthTotal(summaries: DaySummary[]): MonthTotal {
     totalNightOvertimeMinutes,
     weekendWorkDays,
     totalHolidayMinutes,
+    totalLeaveDays: Math.round(totalLeaveDays * 100) / 100,
+    totalLeaveMinutes,
   };
 }
 

@@ -15,6 +15,73 @@ import {
 const VALID_LEAVE_TYPES = LEAVE_TYPES.map((t) => t.value);
 const VALID_DURATION_TYPES = DURATION_TYPES.map((t) => t.value);
 
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+// start_date 〜 end_date の暦日配列（JST基準）
+function enumerateDatesJST(start: string, end: string): string[] {
+  const startMs = Date.parse(`${start}T00:00:00+09:00`);
+  const endMs = Date.parse(`${end}T00:00:00+09:00`);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return [];
+  const result: string[] = [];
+  for (let ms = startMs; ms <= endMs; ms += 86400000) {
+    const d = new Date(ms + JST_OFFSET_MS);
+    result.push(
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`,
+    );
+  }
+  return result;
+}
+
+// 1日あたり控除分: 全休=480 / 半休=240 / 時間休=hours*60
+function leaveMinutesPerDay(
+  duration_type: string,
+  hours_used: number | null,
+): number {
+  if (duration_type === "half_am" || duration_type === "half_pm") return 240;
+  if (duration_type === "hourly")
+    return Math.max(0, Math.round((hours_used ?? 0) * 60));
+  return 480;
+}
+
+// 承認された申請から attendance_records へ leave 行を作成
+// punched_at = 業務日 04:00 JST にすることで businessDayFromIso() で正しくマップされる
+async function syncAttendanceLeaveRows(leaveRequestId: number): Promise<void> {
+  const req = await dbGet<{
+    id: number;
+    user_id: number;
+    start_date: string;
+    end_date: string;
+    duration_type: string;
+    hours_used: number | null;
+  }>(
+    `SELECT id, user_id, start_date, end_date, duration_type, hours_used
+     FROM leave_requests WHERE id = ?`,
+    [leaveRequestId],
+  );
+  if (!req) return;
+
+  const dates = enumerateDatesJST(req.start_date, req.end_date);
+  const minutes = leaveMinutesPerDay(req.duration_type, req.hours_used);
+
+  for (const date of dates) {
+    const punchedAt = `${date}T04:00:00.000+09:00`;
+    // UNIQUE (leave_request_id, punched_at) により重複INSERTは無視される
+    await dbRun(
+      `INSERT OR IGNORE INTO attendance_records
+         (user_id, punch_type, punched_at, kind, leave_minutes, leave_request_id)
+       VALUES (?, 'leave', ?, 'leave', ?, ?)`,
+      [req.user_id, punchedAt, minutes, leaveRequestId],
+    );
+  }
+}
+
+async function deleteAttendanceLeaveRows(leaveRequestId: number): Promise<void> {
+  await dbRun(
+    `DELETE FROM attendance_records WHERE leave_request_id = ?`,
+    [leaveRequestId],
+  );
+}
+
 export async function createLeaveRequest(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -89,15 +156,21 @@ export async function approveLeaveRequest(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/requests?tab=leave&error=invalid_id");
 
-  await dbRun(
+  const result = await dbRun(
     `UPDATE leave_requests
      SET status = 'approved', approver_id = ?, approved_at = ?, updated_at = ?
      WHERE id = ? AND status = 'pending'`,
     [current!.id, nowJST(), nowJST(), id],
   );
+  // 承認が成功した場合のみ attendance に反映
+  if (result.rowsAffected > 0) {
+    await syncAttendanceLeaveRows(id);
+  }
 
   revalidatePath("/admin/requests");
   revalidatePath("/requests");
+  revalidatePath("/history");
+  revalidatePath("/");
   redirect("/admin/requests?tab=leave&success=approved");
 }
 
@@ -116,6 +189,8 @@ export async function rejectLeaveRequest(formData: FormData) {
      WHERE id = ? AND status = 'pending'`,
     [current!.id, nowJST(), reason, nowJST(), id],
   );
+  // pending→rejected なので元々attendanceには無いが、念のため掃除
+  await deleteAttendanceLeaveRows(id);
 
   revalidatePath("/admin/requests");
   revalidatePath("/requests");
@@ -129,7 +204,7 @@ export async function cancelLeaveRequest(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!id) redirect("/requests?tab=leave&error=invalid_id");
 
-  // 自分の申請のみ取消可能・status='pending'のみ
+  // 自分の申請のみ取消可能。pending または approved を対象（承認後の取消も許容）
   const target = await dbGet<{ id: number; user_id: number; status: string }>(
     `SELECT id, user_id, status FROM leave_requests WHERE id = ?`,
     [id],
@@ -137,7 +212,7 @@ export async function cancelLeaveRequest(formData: FormData) {
   if (!target || target.user_id !== user.id) {
     redirect("/requests?tab=leave&error=not_found");
   }
-  if (target.status !== "pending") {
+  if (target.status !== "pending" && target.status !== "approved") {
     redirect("/requests?tab=leave&error=cannot_cancel");
   }
 
@@ -145,8 +220,12 @@ export async function cancelLeaveRequest(formData: FormData) {
     `UPDATE leave_requests SET status = 'cancelled', updated_at = ? WHERE id = ?`,
     [nowJST(), id],
   );
+  // 承認済みからの取消なら attendance も削除
+  await deleteAttendanceLeaveRows(id);
 
   revalidatePath("/requests");
   revalidatePath("/admin/requests");
+  revalidatePath("/history");
+  revalidatePath("/");
   redirect("/requests?tab=leave&success=cancelled");
 }

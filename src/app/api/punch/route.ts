@@ -28,10 +28,11 @@ export async function POST(req: Request) {
   const today = nowBusinessDay();
   const todayRange = businessDayRange(today);
 
-  // 1) 今日(業務日)の最後の打刻（状態遷移判定）
+  // 1) 今日(業務日)の最後の打刻（状態遷移判定）。leave行は除外
   const lastToday = await dbGet<{ punch_type: string; punched_at: string }>(
     `SELECT punch_type, punched_at FROM attendance_records
      WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
+       AND kind = 'work'
      ORDER BY punched_at DESC LIMIT 1`,
     [user.id, todayRange.startIso, todayRange.endIso],
   );
@@ -53,11 +54,13 @@ export async function POST(req: Request) {
       `SELECT punched_at FROM attendance_records a
        WHERE user_id = ? AND punch_type = 'clock_in'
          AND punched_at < ?
+         AND kind = 'work'
          AND NOT EXISTS (
            SELECT 1 FROM attendance_records b
            WHERE b.user_id = a.user_id
              AND b.punch_type = 'clock_out'
              AND b.punched_at > a.punched_at
+             AND b.kind = 'work'
          )
        ORDER BY punched_at DESC LIMIT 1`,
       [user.id, todayRange.startIso],
@@ -84,8 +87,8 @@ export async function POST(req: Request) {
 
   await dbRun(
     `INSERT INTO attendance_records
-     (user_id, punch_type, punched_at, latitude, longitude, accuracy, memo)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     (user_id, punch_type, punched_at, latitude, longitude, accuracy, memo, kind)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'work')`,
     [user.id, punchType, nowJST(), latitude, longitude, accuracy, memo],
   );
 

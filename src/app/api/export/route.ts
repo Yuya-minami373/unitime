@@ -62,7 +62,7 @@ export async function GET(req: Request) {
 
   const monthRange = businessMonthRange(year, month);
   const records = await dbAll<AttendanceRecord>(
-    `SELECT punch_type, punched_at
+    `SELECT punch_type, punched_at, kind, leave_minutes
      FROM attendance_records
      WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
      ORDER BY punched_at ASC`,

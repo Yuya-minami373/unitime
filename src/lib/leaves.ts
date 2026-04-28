@@ -93,14 +93,24 @@ export function requestToDays(req: {
 // 申請ステータスは approved + pending を「コミット済」「保留中」として別々に返す
 export type LeaveBalance = {
   leave_type: string;
-  granted_days: number;
-  used_days: number;     // approved
-  pending_days: number;  // pending
-  remaining_days: number; // granted - used
+  granted_days: number;       // 有効な付与（時効未到達）の合計
+  expired_days: number;       // 時効消滅した付与の合計（労基115条 2年）
+  used_days: number;          // approved
+  pending_days: number;       // pending
+  remaining_days: number;     // granted - used
 };
+
+// asOf 日の2年前を YYYY-MM-DD で返す（時効境界。境界日を含むかは実装で「以後」とする）
+function twoYearsAgo(asOfDate: string): string {
+  const [y, m, d] = asOfDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!));
+  dt.setUTCFullYear(dt.getUTCFullYear() - 2);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
 
 export async function calcBalanceForUser(
   userId: number,
+  asOfDate: string = new Date().toISOString().slice(0, 10),
 ): Promise<Record<string, LeaveBalance>> {
   const grants = await dbAll<LeaveGrant>(
     `SELECT id, user_id, leave_type, special_policy_code, granted_days, granted_at, source, notes
@@ -116,19 +126,28 @@ export async function calcBalanceForUser(
     [userId],
   );
 
+  // 時効境界（2年前以後の付与のみ有効。労基115条）
+  // 'paid' のみ時効適用。特別休暇・代休・振休・無給はその場利用なので時効なし
+  const expiryThreshold = twoYearsAgo(asOfDate);
+
   const balances: Record<string, LeaveBalance> = {};
-  // grantのある type だけ初期化（paid/specialのみ残日数管理）
   for (const g of grants) {
     if (!balances[g.leave_type]) {
       balances[g.leave_type] = {
         leave_type: g.leave_type,
         granted_days: 0,
+        expired_days: 0,
         used_days: 0,
         pending_days: 0,
         remaining_days: 0,
       };
     }
-    balances[g.leave_type]!.granted_days += g.granted_days;
+    const isExpired = g.leave_type === "paid" && g.granted_at < expiryThreshold;
+    if (isExpired) {
+      balances[g.leave_type]!.expired_days += g.granted_days;
+    } else {
+      balances[g.leave_type]!.granted_days += g.granted_days;
+    }
   }
 
   for (const r of requests) {
@@ -137,6 +156,7 @@ export async function calcBalanceForUser(
       balances[r.leave_type] = {
         leave_type: r.leave_type,
         granted_days: 0,
+        expired_days: 0,
         used_days: 0,
         pending_days: 0,
         remaining_days: 0,

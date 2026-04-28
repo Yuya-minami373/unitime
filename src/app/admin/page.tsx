@@ -95,7 +95,7 @@ export default async function AdminPage({
        ORDER BY id`,
     ),
     dbAll<AttendanceRecord & { user_id: number }>(
-      `SELECT user_id, punch_type, punched_at, latitude, longitude
+      `SELECT user_id, punch_type, punched_at, latitude, longitude, kind, leave_minutes
        FROM attendance_records a
        WHERE punched_at >= ? AND punched_at < ?
          AND user_id IN (SELECT id FROM users WHERE status = 'active' AND role != 'owner')

@@ -69,14 +69,14 @@ export default async function HomePage() {
       [user.id, todayRange.startIso, todayRange.endIso],
     ),
     dbAll<AttendanceRecord>(
-      `SELECT punch_type, punched_at
+      `SELECT punch_type, punched_at, kind, leave_minutes
        FROM attendance_records
        WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
        ORDER BY punched_at ASC`,
       [user.id, monthRange.startIso, monthRange.endIso],
     ),
     dbAll<AttendanceRecord>(
-      `SELECT punch_type, punched_at
+      `SELECT punch_type, punched_at, kind, leave_minutes
        FROM attendance_records
        WHERE user_id = ?
          AND substr(punched_at, 1, 10) BETWEEN ? AND ?

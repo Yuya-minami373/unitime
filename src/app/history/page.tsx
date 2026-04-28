@@ -94,7 +94,7 @@ export default async function HistoryPage({
 
   const monthRange = businessMonthRange(year, month);
   const records = await dbAll<AttendanceRecord>(
-    `SELECT punch_type, punched_at, latitude, longitude
+    `SELECT punch_type, punched_at, latitude, longitude, kind, leave_minutes
      FROM attendance_records
      WHERE user_id = ? AND punched_at >= ? AND punched_at < ?
      ORDER BY punched_at ASC`,
@@ -209,8 +209,8 @@ export default async function HistoryPage({
         />
       </div>
 
-      {/* KPI row 2: 社労士向け実績（深夜・深夜残業・土日・法定休日） */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4">
+      {/* KPI row 2: 社労士向け実績（深夜・深夜残業・土日・法定休日・休暇消化） */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 md:gap-4">
         <StatTile
           label="深夜労働（22:00〜5:00）"
           value={formatHoursDecimal(total.totalNightMinutes)}
@@ -234,6 +234,13 @@ export default async function HistoryPage({
           value={formatHoursDecimal(total.totalHolidayMinutes)}
           unit="h"
           accent={total.totalHolidayMinutes > 0 ? "rose" : "neutral"}
+        />
+        <StatTile
+          label="休暇消化"
+          subLabel="承認済"
+          value={total.totalLeaveDays > 0 ? total.totalLeaveDays.toFixed(1) : "0"}
+          unit="日"
+          accent={total.totalLeaveDays > 0 ? "indigo" : "neutral"}
         />
       </div>
 
@@ -288,6 +295,11 @@ export default async function HistoryPage({
                     {isToday && (
                       <span className="rounded-[4px] bg-[var(--brand-primary)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white">
                         今日
+                      </span>
+                    )}
+                    {s.leaveDays > 0 && (
+                      <span className="rounded-[4px] bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                        休暇 {s.leaveDays === 1 ? "1日" : s.leaveDays === 0.5 ? "半休" : `${s.leaveDays.toFixed(1)}日`}
                       </span>
                     )}
                   </div>
@@ -411,6 +423,11 @@ export default async function HistoryPage({
                       >
                         {DAY_JP[dow]}
                       </span>
+                      {s.leaveDays > 0 && (
+                        <span className="ml-1 rounded-[3px] bg-emerald-50 px-1 py-0.5 text-[9px] font-medium text-emerald-700">
+                          休{s.leaveDays === 1 ? "" : s.leaveDays === 0.5 ? "半" : s.leaveDays.toFixed(1)}
+                        </span>
+                      )}
                     </Td>
                     <Td mono>
                       {s.clockIn ? (

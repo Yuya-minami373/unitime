@@ -500,6 +500,7 @@ function BalanceCard({
   balance:
     | {
         granted_days: number;
+        expired_days?: number;
         used_days: number;
         pending_days: number;
         remaining_days: number;
@@ -508,6 +509,7 @@ function BalanceCard({
   subtitle?: string;
 }) {
   const granted = balance?.granted_days ?? 0;
+  const expired = balance?.expired_days ?? 0;
   const used = balance?.used_days ?? 0;
   const pending = balance?.pending_days ?? 0;
   const remaining = balance?.remaining_days ?? 0;
@@ -531,6 +533,9 @@ function BalanceCard({
       </div>
       <div className="mt-1 text-[11px] tabular-nums text-[var(--text-tertiary)]">
         付与累計 {formatDays(granted)} ・ 使用 {formatDays(used)}
+        {expired > 0 && (
+          <span className="ml-1 text-rose-600">・ 期限切れ {formatDays(expired)}</span>
+        )}
       </div>
       {subtitle && (
         <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">{subtitle}</div>

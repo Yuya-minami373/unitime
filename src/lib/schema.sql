@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   crew_shift_id INTEGER REFERENCES crew_shifts(id) ON DELETE SET NULL,
   -- Phase 3a: 代行打刻者（本人打刻時は NULL or user_id と同値）
   registered_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- Phase B #2-B: 休暇承認による自動生成行の識別
+  kind TEXT NOT NULL DEFAULT 'work',           -- 'work' | 'leave'
+  leave_minutes INTEGER NOT NULL DEFAULT 0,     -- 休暇控除時間（分）
+  leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE CASCADE,
   created_at TEXT DEFAULT (datetime('now', '+9 hours')),
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -53,6 +57,9 @@ CREATE INDEX IF NOT EXISTS idx_attendance_user_date
   ON attendance_records(user_id, punched_at);
 CREATE INDEX IF NOT EXISTS idx_attendance_crew_shift
   ON attendance_records(crew_shift_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_leave_request_day
+  ON attendance_records(leave_request_id, punched_at)
+  WHERE leave_request_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
