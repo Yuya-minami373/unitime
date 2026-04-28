@@ -130,11 +130,11 @@ export function LeaveForm({
 
       {isHourly && (
         <>
-          <Field label="開始時刻" required hint="1時間単位">
+          <Field label="開始時刻" required hint="15分単位">
             <input
               name="start_time"
               type="time"
-              step={3600}
+              step={900}
               required
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
@@ -142,11 +142,11 @@ export function LeaveForm({
             />
           </Field>
 
-          <Field label="終了時刻" required hint="開始より後">
+          <Field label="終了時刻" required hint="開始より後・15分単位">
             <input
               name="end_time"
               type="time"
-              step={3600}
+              step={900}
               required
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
