@@ -346,9 +346,12 @@ export default async function AdminPage({
                 36協定アラート
               </h2>
             </div>
-            <span className="text-[11px] text-[var(--text-tertiary)]">
-              月45h超で警告・80h超で重大
-            </span>
+            <Link
+              href="/admin/sanroku"
+              className="text-[11px] font-medium text-[var(--brand-accent)] hover:underline"
+            >
+              詳細 →
+            </Link>
           </div>
           {overtimeWarnings.length === 0 && overtimeWatch.length === 0 ? (
             <div className="rounded-[8px] bg-[var(--accent-emerald-soft)] px-3 py-2.5 text-[12.5px] text-[#047857]">

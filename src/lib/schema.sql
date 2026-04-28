@@ -374,3 +374,22 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
   ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created
   ON notifications(created_at);
+
+-- ===== Phase B #4: 36協定遵守監視 =====
+-- 通知履歴: 同一の (user, type, period) に対する通知を1回に絞るためのキー
+-- type: 'overtime_caution' | 'overtime_warning' | 'overtime_critical'
+--       | 'holiday_work_violation' | 'holiday_work_outofhours'
+--       | 'monthly_total_caution' | 'monthly_total_violation'
+--       | 'multi_month_warning'
+-- target_period: 月 'YYYY-MM' / 協定年度 'AY{n}' / 日 'YYYY-MM-DD' のいずれか
+CREATE TABLE IF NOT EXISTS notification_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  notification_type TEXT NOT NULL,
+  target_period TEXT NOT NULL,
+  notified_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
+  UNIQUE(user_id, notification_type, target_period)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_log_user
+  ON notification_log(user_id, target_period);

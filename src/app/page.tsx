@@ -27,6 +27,8 @@ import {
   WEEK_DAYS,
   type AttendanceRecord,
 } from "@/lib/attendance";
+import { getUserSanrokuOverview } from "@/lib/sanroku";
+import { SanrokuCard } from "@/components/SanrokuCard";
 
 type PunchRecord = {
   punch_type: string;
@@ -88,6 +90,12 @@ export default async function HomePage() {
   const monthSummaries = summarizeMonth(year, month, monthRecords, user.standard_work_minutes);
   const monthTotal = calcMonthTotal(monthSummaries);
   const streak = calcStreak(monthSummaries, today);
+
+  // 36協定遵守状況（社員のみ計算）
+  const sanrokuOverview =
+    user.employment_type === "employee"
+      ? await getUserSanrokuOverview(user.id, user.standard_work_minutes, year, month)
+      : null;
 
   // 月次進捗（所定労働日数ベース）
   const plannedWorkdays = countWorkdays(year, month);
@@ -182,6 +190,9 @@ export default async function HomePage() {
             tone="rose"
           />
         </section>
+
+        {/* 36協定遵守状況（社員のみ表示） */}
+        {sanrokuOverview && <SanrokuCard overview={sanrokuOverview} />}
 
         {/* Month progress + Avg times (2カラム) */}
         <section className="grid gap-4 md:grid-cols-2">

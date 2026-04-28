@@ -81,6 +81,42 @@ export function dayOfWeekFromYmd(ymd: string): number {
 }
 
 // =====================================================================
+// 日本の祝日判定
+// japanese-holidays パッケージを使い、振替休日も祝日として扱う。
+// TZ非依存実装: ymd文字列から年を取り出してgetHolidaysOf(y)を直接参照
+// =====================================================================
+
+// 簡易キャッシュ: 同一年の祝日リストを使い回す（毎回パッケージ呼び出し回避）
+const HOLIDAY_CACHE = new Map<number, Set<string>>();
+
+function loadHolidaysOf(year: number): Set<string> {
+  const cached = HOLIDAY_CACHE.get(year);
+  if (cached) return cached;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const jh = require("japanese-holidays") as {
+    getHolidaysOf: (y: number, furikae?: boolean) => { month: number; date: number; name: string }[];
+  };
+  const set = new Set<string>();
+  for (const h of jh.getHolidaysOf(year, true)) {
+    set.add(`${year}-${String(h.month).padStart(2, "0")}-${String(h.date).padStart(2, "0")}`);
+  }
+  HOLIDAY_CACHE.set(year, set);
+  return set;
+}
+
+export function isJapaneseHoliday(ymd: string): boolean {
+  const y = Number(ymd.slice(0, 4));
+  return loadHolidaysOf(y).has(ymd);
+}
+
+// 「土日祝」の判定（協定上の休日労働対象日）
+export function isAgreementHoliday(ymd: string): boolean {
+  const dow = dayOfWeekFromYmd(ymd);
+  if (dow === 0 || dow === 6) return true;
+  return isJapaneseHoliday(ymd);
+}
+
+// =====================================================================
 // 業務日（business day）境界
 // 0:00基準では23時出勤・翌2時退勤などの日跨ぎ勤務が分断されてしまうため、
 // JST 04:00 を境界とする「業務日」概念を導入する。

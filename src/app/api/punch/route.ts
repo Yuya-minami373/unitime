@@ -92,6 +92,23 @@ export async function POST(req: Request) {
     [user.id, punchType, nowJST(), latitude, longitude, accuracy, memo],
   );
 
+  // Phase B #4: 退勤時に36協定遵守状況をチェック・通知
+  // 社員のみ対象（業務委託・クルーは協定対象外）
+  // 通知失敗は打刻自体の成功には影響させない（ログのみ）
+  if (punchType === "clock_out" && user.employment_type === "employee") {
+    try {
+      const { checkAndNotifySanroku } = await import("@/lib/sanroku");
+      await checkAndNotifySanroku({
+        userId: user.id,
+        userName: user.name,
+        standardWorkMinutes: user.standard_work_minutes ?? 420,
+        appBaseUrl: process.env.APP_BASE_URL,
+      });
+    } catch (err) {
+      console.error("[sanroku] threshold check failed:", err);
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
 
