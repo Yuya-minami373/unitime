@@ -11,6 +11,19 @@ import {
 
 type Action = (formData: FormData) => void | Promise<void>;
 
+// 所定労働時間 9:15-17:15 に揃えて 1時間刻み・分は :15 固定
+const HOUR_OPTIONS = [
+  "9:15",
+  "10:15",
+  "11:15",
+  "12:15",
+  "13:15",
+  "14:15",
+  "15:15",
+  "16:15",
+  "17:15",
+];
+
 export function LeaveForm({
   policies,
   action,
@@ -130,28 +143,38 @@ export function LeaveForm({
 
       {isHourly && (
         <>
-          <Field label="開始時刻" required hint="15分単位">
-            <input
+          <Field label="開始時刻" required hint="所定 9:15〜17:15">
+            <select
               name="start_time"
-              type="time"
-              step={900}
               required
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
               className="u-input"
-            />
+            >
+              <option value="">選択してください</option>
+              {HOUR_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </Field>
 
-          <Field label="終了時刻" required hint="開始より後・15分単位">
-            <input
+          <Field label="終了時刻" required hint="開始より後">
+            <select
               name="end_time"
-              type="time"
-              step={900}
               required
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
               className="u-input"
-            />
+            >
+              <option value="">選択してください</option>
+              {HOUR_OPTIONS.map((t) => (
+                <option key={t} value={t} disabled={!!startTime && t <= startTime}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <div className="md:col-span-2">
