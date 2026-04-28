@@ -250,6 +250,181 @@ export async function notifyHolidayWorkOutOfHours(args: {
   });
 }
 
+// --- Phase B #5: 打刻申請通知ヘルパー ---
+
+const PUNCH_TYPE_JP: Record<string, string> = {
+  clock_in: "出勤",
+  clock_out: "退勤",
+  break_start: "休憩開始",
+  break_end: "休憩終了",
+};
+
+const STAMP_ACTION_JP: Record<string, string> = {
+  add: "追加",
+  modify: "修正",
+  delete: "削除",
+};
+
+function formatTime(iso: string | null): string {
+  if (!iso) return "—";
+  return iso.slice(11, 16);
+}
+
+export async function notifyStampRequestCreated(args: {
+  requestId: number;
+  userName: string;
+  action: string;
+  punchType: string;
+  targetBusinessDay: string;
+  newPunchedAt: string | null;
+  previousPunchedAt: string | null;
+  reason: string;
+  appBaseUrl?: string;
+}): Promise<boolean> {
+  const base = args.appBaseUrl ?? process.env.APP_BASE_URL ?? "";
+  const url = base ? `${base}/admin/requests` : "/admin/requests";
+  const action = STAMP_ACTION_JP[args.action] ?? args.action;
+  const punch = PUNCH_TYPE_JP[args.punchType] ?? args.punchType;
+
+  let timeLine = "";
+  if (args.action === "add") {
+    timeLine = `<b>時刻</b>: ${formatTime(args.newPunchedAt)}`;
+  } else if (args.action === "modify") {
+    timeLine = `<b>時刻</b>: ${formatTime(args.previousPunchedAt)} → <b>${formatTime(args.newPunchedAt)}</b>`;
+  } else if (args.action === "delete") {
+    timeLine = `<b>削除対象</b>: ${formatTime(args.previousPunchedAt)}`;
+  }
+
+  const message = `
+<b>${args.userName}</b> さんから打刻申請が届きました。
+<br><br>
+<b>対象日</b>: ${args.targetBusinessDay}<br>
+<b>区分</b>: ${punch} の${action}<br>
+${timeLine}<br>
+<b>理由</b>: ${args.reason}
+<br><br>
+承認画面: <a href="${url}">${url}</a>
+  `.trim();
+
+  return await postToTeams({
+    title: `📝 打刻${action}申請（${args.userName} / ${args.targetBusinessDay} ${punch}）`,
+    message,
+    mention: true,
+  });
+}
+
+export async function notifyStampRequestApproved(args: {
+  requestId: number;
+  userName: string;
+  approverName: string;
+  action: string;
+  punchType: string;
+  targetBusinessDay: string;
+}): Promise<boolean> {
+  const action = STAMP_ACTION_JP[args.action] ?? args.action;
+  const punch = PUNCH_TYPE_JP[args.punchType] ?? args.punchType;
+
+  const message = `
+<b>${args.userName}</b> さんの打刻申請を <b>${args.approverName}</b> が承認しました。
+<br><br>
+<b>対象日</b>: ${args.targetBusinessDay}<br>
+<b>区分</b>: ${punch} の${action}
+  `.trim();
+
+  return await postToTeams({
+    title: `✅ 打刻申請 承認（${args.userName} / ${args.targetBusinessDay}）`,
+    message,
+    mention: false,
+  });
+}
+
+export async function notifyStampRequestRejected(args: {
+  requestId: number;
+  userName: string;
+  approverName: string;
+  action: string;
+  punchType: string;
+  targetBusinessDay: string;
+  reason: string;
+}): Promise<boolean> {
+  const action = STAMP_ACTION_JP[args.action] ?? args.action;
+  const punch = PUNCH_TYPE_JP[args.punchType] ?? args.punchType;
+
+  const message = `
+<b>${args.userName}</b> さんの打刻申請が <b>${args.approverName}</b> により却下されました。
+<br><br>
+<b>対象日</b>: ${args.targetBusinessDay}<br>
+<b>区分</b>: ${punch} の${action}<br>
+<b>却下理由</b>: ${args.reason}
+  `.trim();
+
+  return await postToTeams({
+    title: `❌ 打刻申請 却下（${args.userName} / ${args.targetBusinessDay}）`,
+    message,
+    mention: false,
+  });
+}
+
+// 月締め前リマインド
+export async function notifyMonthlyCloseReminder(args: {
+  targetMonth: string;
+  daysBeforeClose: 0 | 3;     // 0=当日, 3=3日前
+  pendingStampRequests: number;
+  anomalyCount: number;
+  appBaseUrl?: string;
+}): Promise<boolean> {
+  const base = args.appBaseUrl ?? process.env.APP_BASE_URL ?? "";
+  const url = base ? `${base}/admin/monthly-close` : "/admin/monthly-close";
+  const phase = args.daysBeforeClose === 0 ? "本日が締め日です" : "締め日3日前です";
+  const emoji = args.daysBeforeClose === 0 ? "🔔" : "⏰";
+
+  const message = `
+${args.targetMonth} の月締めについて、${phase}。
+<br><br>
+<b>未承認の打刻申請</b>: ${args.pendingStampRequests}件<br>
+<b>打刻漏れ疑い</b>: ${args.anomalyCount}件
+<br><br>
+未処理が残っている場合、月締め前に対応してください。<br>
+管理画面: <a href="${url}">${url}</a>
+  `.trim();
+
+  return await postToTeams({
+    title: `${emoji} ${args.targetMonth} 月締め${args.daysBeforeClose === 0 ? "当日" : "3日前"}リマインド`,
+    message,
+    mention: true,
+  });
+}
+
+export async function notifyMonthlyCloseDone(args: {
+  targetMonth: string;
+  closedByName: string;
+  totalUsers: number;
+  totalWorkHours: number;
+  sanrokuWarnings: number;
+  appBaseUrl?: string;
+}): Promise<boolean> {
+  const base = args.appBaseUrl ?? process.env.APP_BASE_URL ?? "";
+  const url = base ? `${base}/admin/monthly-close` : "/admin/monthly-close";
+
+  const message = `
+<b>${args.targetMonth}</b> の月締めが完了しました。
+<br><br>
+<b>対象人数</b>: ${args.totalUsers}名<br>
+<b>総勤務時間</b>: ${args.totalWorkHours.toFixed(1)}h<br>
+<b>36協定警告</b>: ${args.sanrokuWarnings}件<br>
+<b>締め担当</b>: ${args.closedByName}
+<br><br>
+締め後の修正は締め解除（reopen）が必要です。<br>
+詳細: <a href="${url}">${url}</a>
+  `.trim();
+
+  return await postToTeams({
+    title: `🔒 ${args.targetMonth} 月締め完了`,
+    message,
+    mention: false,
+  });
+}
+
 export async function notifyMonthlyTotalCaution(args: {
   userName: string;
   year: number;

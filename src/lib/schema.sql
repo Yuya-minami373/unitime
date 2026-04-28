@@ -393,3 +393,81 @@ CREATE TABLE IF NOT EXISTS notification_log (
 
 CREATE INDEX IF NOT EXISTS idx_notification_log_user
   ON notification_log(user_id, target_period);
+
+-- ===== Phase B #5: 打刻申請・月締め機能 =====
+-- 主要SaaS（KoT/ジョブカン/MFクラウド/freee人事労務/ジンジャー勤怠/ハーモス勤怠）に倣う申請承認方式。
+-- 厚労省ガイドライン「客観的記録」原則と労基法109条（出勤簿3年保存）に整合。
+-- 自己修正は不可。すべての打刻変更は申請→承認を経由し、修正前後を punch_history に永続保存。
+
+-- 打刻申請（add/modify/delete）
+CREATE TABLE IF NOT EXISTS stamp_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 申請区分: 'forgot'(忘れ・修正・削除) / 'admin_proxy'(代行打刻・Phase 3a で活用)
+  request_kind TEXT NOT NULL DEFAULT 'forgot',
+  -- 操作種別: 'add' | 'modify' | 'delete'
+  action TEXT NOT NULL,
+  -- 対象業務日 YYYY-MM-DD
+  target_business_day TEXT NOT NULL,
+  -- 対象打刻種別
+  punch_type TEXT NOT NULL,
+  -- 新時刻（add/modify。delete は NULL）
+  new_punched_at TEXT,
+  -- 修正/削除対象の既存レコードID（add は NULL）
+  target_record_id INTEGER REFERENCES attendance_records(id) ON DELETE SET NULL,
+  -- 修正/削除直前のスナップショット（監査用）
+  previous_punched_at TEXT,
+  -- 申請理由（必須）
+  reason TEXT NOT NULL,
+  -- 'pending' | 'approved' | 'rejected' | 'cancelled'
+  status TEXT NOT NULL DEFAULT 'pending',
+  approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  approved_at TEXT,
+  rejection_reason TEXT,
+  cancelled_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_stamp_requests_user ON stamp_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_stamp_requests_status ON stamp_requests(status);
+CREATE INDEX IF NOT EXISTS idx_stamp_requests_target_day ON stamp_requests(target_business_day);
+
+-- 監査ログ（修正前後を永続保存・労基署対応）
+-- attendance_record_id は削除済みも追跡したいため FK 制約なし
+CREATE TABLE IF NOT EXISTS punch_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  attendance_record_id INTEGER,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'created' | 'modified' | 'deleted' | 'admin_direct_edit'
+  event TEXT NOT NULL,
+  previous_punched_at TEXT,
+  new_punched_at TEXT,
+  previous_punch_type TEXT,
+  new_punch_type TEXT,
+  operated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  source_request_id INTEGER REFERENCES stamp_requests(id) ON DELETE SET NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_punch_history_user ON punch_history(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_punch_history_record ON punch_history(attendance_record_id);
+
+-- 月締め状態管理
+-- target_month は業務月（businessMonthRange 基準）の YYYY-MM
+CREATE TABLE IF NOT EXISTS monthly_closes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_month TEXT NOT NULL UNIQUE,
+  -- 'open' | 'closed'
+  status TEXT NOT NULL DEFAULT 'open',
+  closed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  closed_at TEXT,
+  reopened_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reopened_at TEXT,
+  reopen_reason TEXT,
+  -- 締め時点の人別合計サマリ（JSON）
+  summary_snapshot TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_monthly_closes_status ON monthly_closes(status);

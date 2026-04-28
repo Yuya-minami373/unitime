@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { dbRun, dbGet } from "@/lib/db";
 import { nowJST, nowBusinessDay, businessDayRange, businessDayFromIso } from "@/lib/time";
+import { assertBusinessDayOpen, MonthClosedError } from "@/lib/monthly-close";
+import { logPunchHistory } from "@/lib/punch-history";
 
 const VALID_TYPES = ["clock_in", "clock_out", "break_start", "break_end"] as const;
 type PunchType = (typeof VALID_TYPES)[number];
@@ -27,6 +29,16 @@ export async function POST(req: Request) {
   // "今日" は業務日ベース（JST 04:00 境界）
   const today = nowBusinessDay();
   const todayRange = businessDayRange(today);
+
+  // 月締めチェック: 今日の業務月が締め済みなら打刻不可
+  try {
+    await assertBusinessDayOpen(today);
+  } catch (err) {
+    if (err instanceof MonthClosedError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
 
   // 1) 今日(業務日)の最後の打刻（状態遷移判定）。leave行は除外
   const lastToday = await dbGet<{ punch_type: string; punched_at: string }>(
@@ -85,12 +97,27 @@ export async function POST(req: Request) {
     );
   }
 
-  await dbRun(
+  const punchedAt = nowJST();
+  const insertResult = await dbRun(
     `INSERT INTO attendance_records
      (user_id, punch_type, punched_at, latitude, longitude, accuracy, memo, kind)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'work')`,
-    [user.id, punchType, nowJST(), latitude, longitude, accuracy, memo],
+    [user.id, punchType, punchedAt, latitude, longitude, accuracy, memo],
   );
+
+  // Phase B #5: 監査ログ記録（labor law 109条準拠）
+  try {
+    await logPunchHistory({
+      attendanceRecordId: Number(insertResult.lastInsertRowid),
+      userId: user.id,
+      event: "created",
+      newPunchedAt: punchedAt,
+      newPunchType: punchType,
+      operatedByUserId: user.id,
+    });
+  } catch (err) {
+    console.error("[punch-history] log failed:", err);
+  }
 
   // Phase B #4: 退勤時に36協定遵守状況をチェック・通知
   // 社員のみ対象（業務委託・クルーは協定対象外）

@@ -29,6 +29,17 @@ import {
 } from "@/lib/attendance";
 import { getUserSanrokuOverview } from "@/lib/sanroku";
 import { SanrokuCard } from "@/components/SanrokuCard";
+import {
+  detectAnomaliesForUser,
+} from "@/lib/anomalies";
+import {
+  isMonthClosed,
+  previousBusinessMonth,
+} from "@/lib/monthly-close";
+import { myPendingStampRequestCount } from "@/lib/stamp-requests";
+import HomeReminderBanner from "@/components/HomeReminderBanner";
+import Link from "next/link";
+import { ClipboardList, AlertCircle } from "lucide-react";
 
 type PunchRecord = {
   punch_type: string;
@@ -96,6 +107,18 @@ export default async function HomePage() {
     user.employment_type === "employee"
       ? await getUserSanrokuOverview(user.id, user.standard_work_minutes, year, month)
       : null;
+
+  // Phase B #5: 月締めリマインド + 打刻漏れ
+  const prevMonth = previousBusinessMonth(today);
+  const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const daysToMonthEnd = lastDayOfMonth - jstNow.day;
+  // 締め日3日前以降から月末まで or 月初3日以内（前月締めをまだ祐哉さんがしていない期間）はリマインド
+  const shouldShowReminder = daysToMonthEnd <= 3 || jstNow.day <= 3;
+  const prevMonthClosed = await isMonthClosed(prevMonth);
+  const [myPendingStamps, myAnomalies] = await Promise.all([
+    myPendingStampRequestCount(user.id),
+    detectAnomaliesForUser({ userId: user.id, year, month }),
+  ]);
 
   // 月次進捗（所定労働日数ベース）
   const plannedWorkdays = countWorkdays(year, month);
@@ -190,6 +213,15 @@ export default async function HomePage() {
             tone="rose"
           />
         </section>
+
+        {/* 月締めリマインドバナー + 打刻漏れ警告 */}
+        <HomeReminderBanner
+          targetMonth={prevMonth}
+          isClosed={prevMonthClosed}
+          showReminder={shouldShowReminder}
+          pendingStampRequests={myPendingStamps}
+          myAnomalies={myAnomalies}
+        />
 
         {/* 36協定遵守状況（社員のみ表示） */}
         {sanrokuOverview && <SanrokuCard overview={sanrokuOverview} />}

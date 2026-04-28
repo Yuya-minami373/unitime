@@ -21,6 +21,10 @@ import {
   UserCog,
   CalendarCheck,
   IdCard,
+  Clock,
+  Lock,
+  AlertTriangle,
+  History as HistoryIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,10 +38,19 @@ const baseMemberNav: NavItem[] = [
 ];
 
 const requestNavItem: NavItem = { href: "/requests", label: "各種申請", icon: Receipt };
+const stampRequestNavItem: NavItem = {
+  href: "/requests/stamps",
+  label: "打刻申請",
+  icon: Clock,
+};
 
 const teamNav: NavItem[] = [
   { href: "/admin", label: "チーム", icon: Users },
   { href: "/admin/requests", label: "各種申請", icon: Receipt },
+  { href: "/admin/stamp-requests", label: "打刻申請", icon: Clock },
+  { href: "/admin/monthly-close", label: "月締め", icon: Lock },
+  { href: "/admin/anomalies", label: "打刻漏れ", icon: AlertTriangle },
+  { href: "/admin/punch-history", label: "監査ログ", icon: HistoryIcon },
 ];
 
 const crewMgmtNav: NavItem[] = [
@@ -57,7 +70,9 @@ const ownerNav: NavItem[] = [
 // 社員（employment=employee）には「クルー管理」セクションも表示
 function navFor(role: string, employment?: string): NavGroup[] {
   const memberItems =
-    employment === "crew" ? baseMemberNav : [...baseMemberNav, requestNavItem];
+    employment === "crew"
+      ? [...baseMemberNav, stampRequestNavItem]
+      : [...baseMemberNav, requestNavItem, stampRequestNavItem];
 
   if (role === "owner") {
     return [

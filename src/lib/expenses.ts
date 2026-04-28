@@ -123,6 +123,10 @@ export async function getExpenseById(id: number): Promise<ExpenseClaim | undefin
 }
 
 export async function createExpense(input: CreateExpenseInput): Promise<number> {
+  // 月締めチェック
+  const { assertBusinessDayOpen } = await import("./monthly-close");
+  await assertBusinessDayOpen(input.claimDate);
+
   const res = await dbRun(
     `INSERT INTO expense_claims
        (user_id, claim_date, category, amount, purpose,
@@ -145,6 +149,16 @@ export async function createExpense(input: CreateExpenseInput): Promise<number> 
 }
 
 export async function approveExpense(id: number, approverId: number): Promise<void> {
+  // 月締めチェック
+  const target = await dbGet<{ claim_date: string }>(
+    `SELECT claim_date FROM expense_claims WHERE id = ?`,
+    [id],
+  );
+  if (target) {
+    const { assertBusinessDayOpen } = await import("./monthly-close");
+    await assertBusinessDayOpen(target.claim_date);
+  }
+
   await dbRun(
     `UPDATE expense_claims
      SET status = 'approved', approver_id = ?, approved_at = ?

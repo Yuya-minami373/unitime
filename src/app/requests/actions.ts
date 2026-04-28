@@ -130,6 +130,19 @@ export async function createLeaveRequest(formData: FormData) {
     redirect("/requests?tab=leave&error=policy_required");
   }
 
+  // 月締めチェック（業務月で判定）
+  try {
+    const { assertBusinessDayOpen } = await import("@/lib/monthly-close");
+    await assertBusinessDayOpen(start_date);
+    if (end_date && end_date !== start_date) {
+      await assertBusinessDayOpen(end_date);
+    }
+  } catch (err) {
+    if (err && (err as { name?: string }).name === "MonthClosedError") {
+      redirect("/requests?tab=leave&error=month_closed");
+    }
+  }
+
   try {
     const result = await dbRun(
       `INSERT INTO leave_requests
@@ -168,6 +181,23 @@ export async function approveLeaveRequest(formData: FormData) {
 
   const id = Number(formData.get("id"));
   if (!id) redirect("/admin/requests?tab=leave&error=invalid_id");
+
+  // 月締めチェック: 申請対象期間が締め済みなら承認不可
+  const target = await dbGet<{ start_date: string; end_date: string }>(
+    `SELECT start_date, end_date FROM leave_requests WHERE id = ?`,
+    [id],
+  );
+  if (target) {
+    try {
+      const { assertBusinessDayOpen } = await import("@/lib/monthly-close");
+      await assertBusinessDayOpen(target.start_date);
+      await assertBusinessDayOpen(target.end_date);
+    } catch (err) {
+      if (err && (err as { name?: string }).name === "MonthClosedError") {
+        redirect("/admin/requests?tab=leave&error=month_closed");
+      }
+    }
+  }
 
   const result = await dbRun(
     `UPDATE leave_requests
