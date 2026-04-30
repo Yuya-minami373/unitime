@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { dbRun, dbGet } from "@/lib/db";
-import { nowJST, nowBusinessDay, businessDayRange, businessDayFromIso } from "@/lib/time";
+import { nowJST, nowBusinessDay, businessDayRange } from "@/lib/time";
 import { assertBusinessDayOpen, MonthClosedError } from "@/lib/monthly-close";
 import { logPunchHistory } from "@/lib/punch-history";
 
@@ -60,35 +60,10 @@ export async function POST(req: Request) {
     }
   }
 
-  // 3) クロスデー未退勤チェック: 過去の業務日の clock_in に対応する clock_out が無ければブロック
-  if (punchType === "clock_in") {
-    const openShift = await dbGet<{ punched_at: string }>(
-      `SELECT punched_at FROM attendance_records a
-       WHERE user_id = ? AND punch_type = 'clock_in'
-         AND punched_at < ?
-         AND kind = 'work'
-         AND NOT EXISTS (
-           SELECT 1 FROM attendance_records b
-           WHERE b.user_id = a.user_id
-             AND b.punch_type = 'clock_out'
-             AND b.punched_at > a.punched_at
-             AND b.kind = 'work'
-         )
-       ORDER BY punched_at DESC LIMIT 1`,
-      [user.id, todayRange.startIso],
-    );
-    if (openShift) {
-      const date = businessDayFromIso(openShift.punched_at);
-      return NextResponse.json(
-        {
-          error: `${date} の退勤打刻が未完了です。管理者に修正を依頼してください。`,
-        },
-        { status: 409 },
-      );
-    }
-  }
-
-  // 4) 状態遷移バリデーション
+  // 3) 状態遷移バリデーション
+  //    過去日の未退勤があっても翌日以降の出勤打刻はブロックしない（仕様: 2026-04-30）。
+  //    退勤忘れは anomalies.ts の missing_clock_out で検知され、HomeReminderBanner と
+  //    月末リマインドCron で本人に通知される。後追いは打刻申請（/requests/stamps/new）で補完。
   const allowed = getAllowedNextPunches(lastToday?.punch_type);
   if (!allowed.includes(punchType)) {
     return NextResponse.json(
