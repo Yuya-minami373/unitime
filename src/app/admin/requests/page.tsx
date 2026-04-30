@@ -8,10 +8,14 @@ import {
   XCircle,
   ShieldAlert,
   ExternalLink,
+  Ban,
 } from "lucide-react";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import { dbAll } from "@/lib/db";
+import { listAllStampRequests, pendingStampRequestCount } from "@/lib/stamp-requests";
+import { formatTime } from "@/lib/time";
+import StampApprovalActions from "../stamp-requests/StampApprovalActions";
 import {
   listAllExpenses,
   statusLabel,
@@ -40,7 +44,7 @@ type SearchParams = {
   error?: string;
 };
 
-type Tab = "expense" | "leave";
+type Tab = "expense" | "leave" | "stamp";
 
 type LeaveRequestWithUser = LeaveRequest & {
   user_name: string | null;
@@ -57,7 +61,11 @@ export default async function AdminRequestsPage({
   if (!isAdmin(user)) redirect("/");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "leave" ? "leave" : "expense";
+  const tab: Tab =
+    sp.tab === "leave" ? "leave" : sp.tab === "stamp" ? "stamp" : "expense";
+
+  // 各タブのpendingカウント（バッジ用）
+  const stampPending = await pendingStampRequestCount();
 
   return (
     <AppShell
@@ -88,6 +96,14 @@ export default async function AdminRequestsPage({
         >
           休暇
         </TopTabLink>
+        <TopTabLink
+          href="/admin/requests?tab=stamp"
+          active={tab === "stamp"}
+          icon={Clock}
+          count={stampPending}
+        >
+          打刻
+        </TopTabLink>
       </div>
 
       {tab === "expense" ? (
@@ -95,6 +111,8 @@ export default async function AdminRequestsPage({
           subtab={sp.subtab === "history" ? "history" : "pending"}
           ym={sp.ym ?? currentYearMonth()}
         />
+      ) : tab === "stamp" ? (
+        <StampAdminPanel subtab={sp.subtab === "history" ? "history" : "pending"} />
       ) : (
         <LeaveAdminPanel
           subtab={sp.subtab === "history" ? "history" : "pending"}
@@ -638,11 +656,13 @@ function TopTabLink({
   active,
   icon: Icon,
   children,
+  count,
 }: {
   href: string;
   active: boolean;
   icon: typeof Receipt;
   children: React.ReactNode;
+  count?: number;
 }) {
   return (
     <Link
@@ -655,6 +675,11 @@ function TopTabLink({
     >
       <Icon size={14} strokeWidth={1.75} />
       {children}
+      {typeof count === "number" && count > 0 && (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
@@ -827,4 +852,134 @@ function leaveSuccessMessage(code: string): string {
     default:
       return code;
   }
+}
+
+// ============== 打刻タブ =================
+
+const STAMP_STATUS_STYLE = {
+  pending: { label: "申請中", className: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
+  approved: { label: "承認済", className: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  rejected: { label: "却下", className: "bg-rose-50 text-rose-700 border-rose-200", icon: XCircle },
+  cancelled: { label: "取消済", className: "bg-gray-50 text-gray-600 border-gray-200", icon: Ban },
+} as const;
+
+const STAMP_PUNCH_LABEL: Record<string, string> = {
+  clock_in: "出勤",
+  clock_out: "退勤",
+  break_start: "休憩開始",
+  break_end: "休憩終了",
+};
+
+const STAMP_ACTION_LABEL: Record<string, string> = {
+  add: "追加",
+  modify: "修正",
+  delete: "削除",
+};
+
+async function StampAdminPanel({
+  subtab,
+}: {
+  subtab: "pending" | "history";
+}) {
+  const items = await listAllStampRequests(
+    subtab === "pending" ? { status: "pending" } : undefined,
+  );
+  const pendingCount = (await listAllStampRequests({ status: "pending" })).length;
+
+  return (
+    <>
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3">
+        <KpiTile
+          label="承認待ち"
+          value={`${pendingCount} 件`}
+          accent={pendingCount > 0 ? "amber" : "neutral"}
+        />
+        <KpiTile label="表示件数" value={`${items.length} 件`} accent="neutral" />
+      </div>
+
+      <div className="mb-4 flex items-center gap-1 border-b border-[var(--border-light)]">
+        <SubTabLink
+          href="/admin/requests?tab=stamp"
+          label="承認待ち"
+          active={subtab === "pending"}
+          count={pendingCount}
+        />
+        <SubTabLink
+          href="/admin/requests?tab=stamp&subtab=history"
+          label="履歴"
+          active={subtab === "history"}
+        />
+      </div>
+
+      {items.length === 0 ? (
+        <EmptyState
+          message={subtab === "pending" ? "承認待ちの打刻申請はありません" : "申請履歴はありません"}
+        />
+      ) : (
+        <div className="space-y-3">
+          {items.map((it) => {
+            const status = STAMP_STATUS_STYLE[it.status];
+            const StatusIcon = status.icon;
+            return (
+              <div key={it.id} className="u-card p-4 md:p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[11px] font-medium ${status.className}`}
+                      >
+                        <StatusIcon size={10} strokeWidth={2} />
+                        {status.label}
+                      </span>
+                      <span className="text-[15px] font-semibold text-[var(--text-primary)]">
+                        {it.user_name}
+                      </span>
+                      <span className="tabular-nums text-[12px] text-[var(--text-tertiary)]">
+                        {it.target_business_day}
+                      </span>
+                      <span className="rounded-[4px] bg-[var(--brand-50)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--brand-primary)]">
+                        {STAMP_PUNCH_LABEL[it.punch_type] ?? it.punch_type}
+                      </span>
+                      <span className="rounded-[4px] bg-[var(--bg-subtle-alt)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                        {STAMP_ACTION_LABEL[it.action] ?? it.action}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 text-[13px] tabular-nums text-[var(--text-secondary)]">
+                      {it.action === "add"
+                        ? `→ ${formatTime(it.new_punched_at!)}`
+                        : it.action === "modify"
+                        ? `${formatTime(it.previous_punched_at!)} → ${formatTime(it.new_punched_at!)}`
+                        : `削除: ${formatTime(it.previous_punched_at!)}`}
+                    </div>
+
+                    <div className="mt-2 rounded-[6px] bg-[var(--bg-subtle-alt)] p-2 text-[12.5px] text-[var(--text-secondary)]">
+                      <span className="font-medium">理由:</span> {it.reason}
+                    </div>
+
+                    {it.rejection_reason && (
+                      <div className="mt-2 rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+                        却下理由: {it.rejection_reason}
+                      </div>
+                    )}
+
+                    <div className="mt-2 text-[11px] text-[var(--text-quaternary)]">
+                      申請日時: {it.created_at.replace("T", " ").slice(0, 16)}
+                      {it.approved_at && (
+                        <> ／ 処理日時: {it.approved_at.replace("T", " ").slice(0, 16)}</>
+                      )}
+                    </div>
+                  </div>
+
+                  {it.status === "pending" && (
+                    <StampApprovalActions requestId={it.id} userName={it.user_name} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
 }

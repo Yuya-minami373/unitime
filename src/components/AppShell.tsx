@@ -23,8 +23,6 @@ import {
   IdCard,
   Clock,
   Lock,
-  AlertTriangle,
-  History as HistoryIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,8 +36,9 @@ const baseMemberNav: NavItem[] = [
 ];
 
 const requestNavItem: NavItem = { href: "/requests", label: "各種申請", icon: Receipt };
-const stampRequestNavItem: NavItem = {
-  href: "/requests/stamps",
+// クルー専用: 各種申請ナビが非表示のため、打刻申請への直リンクを別出し
+const crewStampNavItem: NavItem = {
+  href: "/requests/stamps/new",
   label: "打刻申請",
   icon: Clock,
 };
@@ -47,10 +46,7 @@ const stampRequestNavItem: NavItem = {
 const teamNav: NavItem[] = [
   { href: "/admin", label: "チーム", icon: Users },
   { href: "/admin/requests", label: "各種申請", icon: Receipt },
-  { href: "/admin/stamp-requests", label: "打刻申請", icon: Clock },
-  { href: "/admin/monthly-close", label: "月締め", icon: Lock },
-  { href: "/admin/anomalies", label: "打刻漏れ", icon: AlertTriangle },
-  { href: "/admin/punch-history", label: "監査ログ", icon: HistoryIcon },
+  { href: "/admin/monthly-close", label: "月次管理", icon: Lock },
 ];
 
 const crewMgmtNav: NavItem[] = [
@@ -71,8 +67,8 @@ const ownerNav: NavItem[] = [
 function navFor(role: string, employment?: string): NavGroup[] {
   const memberItems =
     employment === "crew"
-      ? [...baseMemberNav, stampRequestNavItem]
-      : [...baseMemberNav, requestNavItem, stampRequestNavItem];
+      ? [...baseMemberNav, crewStampNavItem]
+      : [...baseMemberNav, requestNavItem];
 
   if (role === "owner") {
     return [

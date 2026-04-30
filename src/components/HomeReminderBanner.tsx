@@ -96,7 +96,7 @@ export default function HomeReminderBanner({
                 打刻申請: {pendingStampRequests}件 承認待ち
               </div>
               <Link
-                href="/requests/stamps"
+                href="/requests?tab=stamp"
                 className="mt-0.5 inline-block text-[11.5px] text-[var(--brand-accent)] underline hover:no-underline"
               >
                 申請一覧を見る →

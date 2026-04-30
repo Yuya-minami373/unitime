@@ -34,8 +34,11 @@ import {
   type LeaveRequest,
 } from "@/lib/leaves";
 import { cancelLeaveRequest } from "./actions";
+import { listMyStampRequests } from "@/lib/stamp-requests";
+import { formatTime } from "@/lib/time";
+import StampCancelButton from "./stamps/CancelButton";
 
-type Tab = "expense" | "leave";
+type Tab = "expense" | "leave" | "stamp";
 
 export default async function RequestsPage({
   searchParams,
@@ -52,7 +55,8 @@ export default async function RequestsPage({
   if (user.employment_type === "crew") redirect("/");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "leave" ? "leave" : "expense";
+  const tab: Tab =
+    sp.tab === "leave" ? "leave" : sp.tab === "stamp" ? "stamp" : "expense";
 
   return (
     <AppShell
@@ -68,11 +72,21 @@ export default async function RequestsPage({
           </p>
         </div>
         <Link
-          href={tab === "expense" ? "/expenses/new" : "/requests/leaves/new"}
+          href={
+            tab === "expense"
+              ? "/expenses/new"
+              : tab === "leave"
+              ? "/requests/leaves/new"
+              : "/requests/stamps/new"
+          }
           className="u-btn u-btn-primary"
         >
           <Plus size={14} strokeWidth={1.75} />
-          {tab === "expense" ? "立替精算を新規申請" : "休暇を新規申請"}
+          {tab === "expense"
+            ? "立替精算を新規申請"
+            : tab === "leave"
+            ? "休暇を新規申請"
+            : "打刻を新規申請"}
         </Link>
       </div>
 
@@ -84,10 +98,15 @@ export default async function RequestsPage({
         <TabLink href="/requests?tab=leave" active={tab === "leave"} icon={CalendarDays}>
           休暇
         </TabLink>
+        <TabLink href="/requests?tab=stamp" active={tab === "stamp"} icon={Clock}>
+          打刻
+        </TabLink>
       </div>
 
       {tab === "expense" ? (
         <ExpensePanel userId={user.id} newId={sp.new} />
+      ) : tab === "stamp" ? (
+        <StampPanel userId={user.id} />
       ) : (
         <LeavePanel
           userId={user.id}
@@ -691,4 +710,120 @@ function errorMessage(code: string): string {
     default:
       return `エラー（${code}）`;
   }
+}
+
+// ============== 打刻申請パネル =================
+
+const STAMP_STATUS_STYLE = {
+  pending: {
+    label: "申請中",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    icon: Clock,
+  },
+  approved: {
+    label: "承認済",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    label: "却下",
+    className: "bg-rose-50 text-rose-700 border-rose-200",
+    icon: XCircle,
+  },
+  cancelled: {
+    label: "取消済",
+    className: "bg-gray-50 text-gray-600 border-gray-200",
+    icon: Ban,
+  },
+} as const;
+
+const STAMP_PUNCH_LABEL: Record<string, string> = {
+  clock_in: "出勤",
+  clock_out: "退勤",
+  break_start: "休憩開始",
+  break_end: "休憩終了",
+};
+
+const STAMP_ACTION_LABEL: Record<string, string> = {
+  add: "追加",
+  modify: "修正",
+  delete: "削除",
+};
+
+async function StampPanel({ userId }: { userId: number }) {
+  const items = await listMyStampRequests(userId);
+
+  if (items.length === 0) {
+    return (
+      <div className="u-card flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <Clock size={28} strokeWidth={1.5} className="text-[var(--text-quaternary)]" />
+        <div>
+          <p className="text-[14px] font-medium text-[var(--text-secondary)]">
+            まだ打刻申請がありません
+          </p>
+          <p className="mt-1 text-[12px] text-[var(--text-quaternary)]">
+            打刻を忘れた / 押し間違えた場合は新規申請してください
+          </p>
+        </div>
+        <Link href="/requests/stamps/new" className="u-btn u-btn-primary mt-2">
+          <Plus size={14} strokeWidth={1.75} />
+          最初の申請を作成
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="u-card overflow-hidden">
+      <ul className="divide-y divide-[var(--border-light)]">
+        {items.map((it) => {
+          const status = STAMP_STATUS_STYLE[it.status];
+          const StatusIcon = status.icon;
+          return (
+            <li key={it.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[11px] font-medium ${status.className}`}
+                    >
+                      <StatusIcon size={10} strokeWidth={2} />
+                      {status.label}
+                    </span>
+                    <span className="tabular-nums text-[12px] text-[var(--text-tertiary)]">
+                      {it.target_business_day}
+                    </span>
+                    <span className="rounded-[4px] bg-[var(--brand-50)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--brand-primary)]">
+                      {STAMP_PUNCH_LABEL[it.punch_type] ?? it.punch_type}
+                    </span>
+                    <span className="rounded-[4px] bg-[var(--bg-subtle-alt)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                      {STAMP_ACTION_LABEL[it.action] ?? it.action}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[12.5px] tabular-nums text-[var(--text-secondary)]">
+                    {it.action === "add"
+                      ? `→ ${formatTime(it.new_punched_at!)}`
+                      : it.action === "modify"
+                      ? `${formatTime(it.previous_punched_at!)} → ${formatTime(it.new_punched_at!)}`
+                      : `削除: ${formatTime(it.previous_punched_at!)}`}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[var(--text-tertiary)] break-words">
+                    理由: {it.reason}
+                  </div>
+                  {it.rejection_reason && (
+                    <div className="mt-1 rounded-[4px] bg-rose-50 px-2 py-1 text-[11.5px] text-rose-700">
+                      却下理由: {it.rejection_reason}
+                    </div>
+                  )}
+                </div>
+                {it.status === "pending" && (
+                  <StampCancelButton requestId={it.id} />
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
